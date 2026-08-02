@@ -64,16 +64,25 @@ interface SessionEvent {
   }
 }
 
-/** 全量解析一个 session 文件，返回结构化 Session */
-export function parseSessionFile(filePath: string): Session | null {
+/** 解析失败的原因：
+ *  - 'empty'：文件为空或不可读
+ *  - 'no-conversation'：文件存在但无对话内容（Claude Code 写的 summary/snapshot 辅助文件）
+ *  - 'read-error'：读取抛异常
+ */
+export type ParseFailureReason = 'empty' | 'no-conversation' | 'read-error'
+
+export type ParseResult = { ok: true; session: Session } | { ok: false; reason: ParseFailureReason }
+
+/** 全量解析一个 session 文件，返回结构化 Session 或失败原因 */
+export function parseSessionFileResult(filePath: string): ParseResult {
   let content: string
   try {
     content = fs.readFileSync(filePath, 'utf8')
   } catch {
-    return null
+    return { ok: false, reason: 'read-error' }
   }
   const lines = content.split('\n').filter(Boolean)
-  if (lines.length === 0) return null
+  if (lines.length === 0) return { ok: false, reason: 'empty' }
 
   let sessionId: string | null = null
   let projectPath = ''
@@ -133,7 +142,15 @@ export function parseSessionFile(filePath: string): Session | null {
     }
   }
 
-  if (!sessionId) return null
+  // 没在内容里找到 sessionId：fallback 用文件名里的 uuid
+  // （summary / file-history-snapshot 这类辅助文件没有 sessionId 字段，但文件名遵循 uuid 命名）
+  if (!sessionId) {
+    sessionId = extractSessionId(path.basename(filePath))
+  }
+  // 既没 sessionId 又没任何对话内容（user/assistant）：归类为「无对话」而非「失败」
+  if (!sessionId || (userMessageCount === 0 && assistantMessageCount === 0)) {
+    return { ok: false, reason: 'no-conversation' }
+  }
 
   const stat = fs.statSync(filePath)
   const now = Date.now()
@@ -142,22 +159,31 @@ export function parseSessionFile(filePath: string): Session | null {
   const durationMs = Math.max(0, end - start)
 
   return {
-    id: sessionId,
-    filePath,
-    projectPath,
-    gitBranch,
-    claudeVersion,
-    startedAt: start,
-    endedAt: end,
-    durationMs,
-    userMessageCount,
-    assistantMessageCount,
-    toolCallCount,
-    errorCount,
-    models: [...models],
-    fileSizeBytes: stat.size,
-    lineCount: lines.length,
-    lastParsedLineCount: lines.length,
-    ingestedAt: now
+    ok: true,
+    session: {
+      id: sessionId,
+      filePath,
+      projectPath,
+      gitBranch,
+      claudeVersion,
+      startedAt: start,
+      endedAt: end,
+      durationMs,
+      userMessageCount,
+      assistantMessageCount,
+      toolCallCount,
+      errorCount,
+      models: [...models],
+      fileSizeBytes: stat.size,
+      lineCount: lines.length,
+      lastParsedLineCount: lines.length,
+      ingestedAt: now
+    }
   }
+}
+
+/** 兼容旧调用：返回 Session 或 null（不区分失败原因） */
+export function parseSessionFile(filePath: string): Session | null {
+  const r = parseSessionFileResult(filePath)
+  return r.ok ? r.session : null
 }

@@ -199,12 +199,7 @@ export interface NaviAPI {
   getPersonalityHistory: () => Promise<PersonalityHistoryRow[]>
   getAllBrain: () => Promise<Record<string, BrainProviderConfig>>
   getBrain: (scope: string) => Promise<BrainProviderConfig>
-  setBrain: (
-    scope: string,
-    cfg: { provider: string; model: string; baseUrl: string; apiKey: string; temperature: number }
-  ) => Promise<BrainProviderConfig>
   getProviderPresets: () => Promise<ProviderPreset[]>
-  useClaudeConfig: () => Promise<{ applied: boolean; detail: Record<string, BrainProviderConfig | null> }>
   getClaudeConfigStatus: () => Promise<{ available: boolean; baseUrl: string; model: string; hasToken: boolean }>
   getTimeline: (date?: string) => Promise<TimelineEntryRow[] | { entries: TimelineEntryRow[]; hasSessions: boolean }>
   generateTimeline: (hourStartMs: number) => Promise<{ ok: boolean; reason?: string }>

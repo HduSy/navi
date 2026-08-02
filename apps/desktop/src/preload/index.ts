@@ -21,15 +21,10 @@ const naviAPI = {
   setPersonalityFreeText: (text: string) => ipcRenderer.invoke('navi:setPersonalityFreeText', text),
   getPersonalityHistory: () => ipcRenderer.invoke('navi:getPersonalityHistory'),
 
-  // 大脑
+  // 大脑（只读，始终从 ~/.claude/settings.json 派生）
   getAllBrain: () => ipcRenderer.invoke('navi:getAllBrain'),
   getBrain: (scope: string) => ipcRenderer.invoke('navi:getBrain', scope),
-  setBrain: (
-    scope: string,
-    cfg: { provider: string; model: string; baseUrl: string; apiKey: string; temperature: number }
-  ) => ipcRenderer.invoke('navi:setBrain', scope, cfg),
   getProviderPresets: () => ipcRenderer.invoke('navi:getProviderPresets'),
-  useClaudeConfig: () => ipcRenderer.invoke('navi:useClaudeConfig'),
   getClaudeConfigStatus: () => ipcRenderer.invoke('navi:getClaudeConfigStatus'),
 
   // 时间线

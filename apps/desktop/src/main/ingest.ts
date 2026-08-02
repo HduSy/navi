@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import {
   listSessionFiles,
-  parseSessionFile,
+  parseSessionFileResult,
   sessions,
   projects,
   skills,
@@ -53,11 +53,15 @@ export function ingestAllSessions(): IngestResult {
       skipped++
       continue
     }
-    const session = parseSessionFile(file.filePath)
-    if (!session) {
-      failed++
+    const result = parseSessionFileResult(file.filePath)
+    if (!result.ok) {
+      // 真正的失败（读取错误）才计入 failed；
+      // empty / no-conversation 是合理跳过（Claude Code 的辅助文件），计入 skipped
+      if (result.reason === 'read-error') failed++
+      else skipped++
       continue
     }
+    const session = result.session
     db.insert(sessions)
       .values({
         sessionId: session.id,

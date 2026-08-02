@@ -7,7 +7,7 @@ import { getWiki } from './wiki-host.js'
 import { ingestAllSessions, getSessionStats, generateTimelineForHour, generateTimelineForDay, generateDiary, generateExperiencesForSession, generatePersonsForSession } from './ingest.js'
 import { sendMessage, getRecentMessages } from './dialogue.js'
 import { getPersonality, setPersonalityDimensions, setPersonalityFreeText, type PersonalityDimensions } from './personality.js'
-import { getBrain, setBrain, getAllBrain, applyClaudeToAll, getClaudeConfigStatus, ensureDefaultBrain } from './brain-host.js'
+import { getBrain, getAllBrain, getClaudeConfigStatus } from './brain-host.js'
 import { lintWiki } from './lint.js'
 import { startScheduler } from './scheduler.js'
 import {
@@ -102,14 +102,10 @@ ipcMain.handle('navi:getPersonalityHistory', () =>
   getDb().select().from(personalityHistory).orderBy(desc(personalityHistory.createdAt)).limit(20).all()
 )
 
-// 大脑
+// 大脑（只读，始终从 ~/.claude/settings.json 派生）
 ipcMain.handle('navi:getAllBrain', () => getAllBrain())
 ipcMain.handle('navi:getBrain', (_e, scope: BrainScope) => getBrain(scope))
-ipcMain.handle('navi:setBrain', (_e, scope: BrainScope, cfg: { provider: string; model: string; baseUrl: string; apiKey: string; temperature: number }) =>
-  setBrain(scope, cfg)
-)
 ipcMain.handle('navi:getProviderPresets', () => PROVIDER_PRESETS)
-ipcMain.handle('navi:useClaudeConfig', () => applyClaudeToAll())
 ipcMain.handle('navi:getClaudeConfigStatus', () => getClaudeConfigStatus())
 
 // 时间线
@@ -231,7 +227,6 @@ ipcMain.handle('navi:lint', () => lintWiki())
 void app.whenReady().then(() => {
   getDb()
   getWiki()
-  ensureDefaultBrain() // 启动时若无大脑配置，默认走 Claude 配置
   const result = ingestAllSessions()
   safeLog(
     `[navi] initial ingest: scanned=${result.scanned} upserted=${result.upserted} skipped=${result.skipped} failed=${result.failed} in ${result.durationMs}ms`
