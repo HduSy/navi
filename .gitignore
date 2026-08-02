@@ -1,0 +1,37 @@
+# 依赖
+node_modules
+
+# 构建产物
+dist
+out
+.vite
+build
+
+# 日志
+*.log
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 环境变量 / 密钥
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+
+# 数据库（本地运行时生成，不提交）
+*.db
+*.db-wal
+*.db-shm
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Wiki 数据（运行时生成，不提交；保留目录占位）
+wiki/
+!wiki/.gitkeep

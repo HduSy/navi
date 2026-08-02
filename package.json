@@ -1,0 +1,25 @@
+{
+  "name": "navi",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Navi - your AI work companion that observes, remembers, and grows with you",
+  "type": "module",
+  "engines": {
+    "node": ">=22",
+    "pnpm": ">=10.7 <11"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @navi/desktop dev",
+    "build": "pnpm --filter @navi/desktop build",
+    "preview": "pnpm --filter @navi/desktop preview",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  },
+  "packageManager": "pnpm@10.23.0",
+  "pnpm": {
+    "onlyBuiltDependencies": ["electron", "esbuild"]
+  }
+}
