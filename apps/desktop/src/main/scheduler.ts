@@ -1,124 +1,103 @@
-import { generateTimelineForHour, generateDiary, generateExperiencesForSession, generatePersonsForSession } from './ingest.js'
-import { lintWiki } from './lint.js'
-import { getDb } from './db.js'
-import { sessions, scheduleRuns, toLocalDateStr, fromLocalDateStr, toLocalHourStart } from '@navi/core'
-import { eq, desc } from 'drizzle-orm'
+/**
+ * desktop 主进程的调度器 wiring：
+ *  - 注入数据访问（drizzle 查询 + schedule_runs 写入）
+ *  - 注入具体任务（来自 ingest.ts / lint.ts）
+ *  - 引擎本身在 @navi/scheduler
+ */
 
-let timer: NodeJS.Timeout | null = null
+import { eq, desc } from 'drizzle-orm'
+import { sessions, scheduleRuns } from '@navi/core'
+import { Scheduler } from '@navi/scheduler'
+import { getDb } from './db.js'
+import {
+  generateTimelineForHour,
+  generateDiary,
+  generateExperiencesForSession,
+  generatePersonsForSession
+} from './ingest.js'
+import { lintWiki } from './lint.js'
+
+let scheduler: Scheduler | null = null
 
 export function startScheduler(): void {
-  if (timer) return
-  timer = setInterval(() => {
-    void runPeriodicTasks()
-  }, 5 * 60 * 1000)
-  setTimeout(() => void runPeriodicTasks(), 30_000)
+  if (scheduler) return
+  scheduler = new Scheduler(makeDeps(), makeTasks())
+  scheduler.start()
 }
 
 export function stopScheduler(): void {
-  if (timer) {
-    clearInterval(timer)
-    timer = null
+  if (scheduler) {
+    scheduler.stop()
+    scheduler = null
   }
 }
 
-async function runPeriodicTasks(): Promise<void> {
-  const now = new Date()
-  const todayStr = toLocalDateStr(now.getTime())
-  const todayMs = fromLocalDateStr(todayStr)
+/** 给上层测试用：拿当前 scheduler 实例 */
+export function getScheduler(): Scheduler | null {
+  return scheduler
+}
 
-  // 时间线：覆盖今天所有有 session 的小时（补全 + 当前小时）
-  await backfillTodayTimeline(todayMs)
-
-  // 每天 21:00 后：生成当天日记（需 LLM，没配则跳过）
-  if (now.getHours() >= 21 && todayMs) {
-    await runTask('diary', () => generateDiary(todayMs))
-  }
-
-  // 每周一凌晨：认知健康检查
-  if (now.getDay() === 1 && now.getHours() === 3 && now.getMinutes() < 10) {
-    await runTask('lint', async () => {
+function makeTasks() {
+  return {
+    generateTimelineForHour,
+    generateDiary,
+    generateExperiencesForSession,
+    generatePersonsForSession,
+    // lintWiki 返回 LintResult（具名 interface），这里转成 void，
+    // 因为它的副作用（写 log.md）比返回值更重要
+    lintWiki: () => {
       lintWiki()
-    })
-  }
-
-  // 持续：对最近 30 分钟内新入库的 session 跑经验/人物抽取
-  await processRecentNewSessions()
-}
-
-/** 补全当天所有有 session 但还没生成时间线的小时 */
-async function backfillTodayTimeline(dayStartMs: number): Promise<void> {
-  if (!dayStartMs || Number.isNaN(dayStartMs)) return
-  const db = getDb()
-  const dayEndMs = dayStartMs + 86_400_000 - 1
-  const daySessions = db
-    .select({ startedAt: sessions.startedAt, endedAt: sessions.endedAt })
-    .from(sessions)
-    .all()
-    .filter((s) => s.startedAt < dayEndMs && s.endedAt >= dayStartMs)
-
-  const hours = new Set<number>()
-  for (const s of daySessions) {
-    const startH = toLocalHourStart(s.startedAt)
-    const endH = toLocalHourStart(s.endedAt)
-    let cur = startH
-    let guard = 0
-    while (cur <= endH && guard < 24) {
-      hours.add(cur)
-      cur += 3_600_000
-      guard++
     }
   }
-
-  // 并行生成所有小时（LLM 调用是 I/O 密集型）
-  const sortedHours = [...hours].sort((a, b) => a - b)
-  await Promise.all(sortedHours.map((h) => runTask('timeline', () => generateTimelineForHour(h))))
 }
 
-async function processRecentNewSessions(): Promise<void> {
-  const db = getDb()
-  const cutoff = Date.now() - 30 * 60 * 1000
-  const recent = db
-    .select({ filePath: sessions.filePath, ingestedAt: sessions.ingestedAt })
-    .from(sessions)
-    .orderBy(desc(sessions.ingestedAt))
-    .all()
-    .filter((s) => s.ingestedAt > cutoff)
-    .slice(0, 3)
-  for (const r of recent) {
-    await runTask('experience', () => generateExperiencesForSession(r.filePath))
-    await runTask('person', () => generatePersonsForSession(r.filePath))
-  }
-}
-
-async function runTask(task: string, fn: () => Promise<unknown>): Promise<void> {
-  const db = getDb()
-  const startedAt = Date.now()
-  const startTs = startedAt
-  const id = db
-    .insert(scheduleRuns)
-    .values({ task, status: 'running', startedAt })
-    .returning({ id: scheduleRuns.id })
-    .all()[0]?.id
-  try {
-    const result = await fn()
-    db.update(scheduleRuns)
-      .set({
-        status: 'done',
-        result: typeof result === 'string' ? result : JSON.stringify({ ok: true }),
-        finishedAt: Date.now(),
-        durationMs: Date.now() - startTs
-      })
-      .where(id ? eq(scheduleRuns.id, id) : eq(scheduleRuns.task, task))
-      .run()
-  } catch (e) {
-    db.update(scheduleRuns)
-      .set({
-        status: 'failed',
-        result: e instanceof Error ? e.message : String(e),
-        finishedAt: Date.now(),
-        durationMs: Date.now() - startTs
-      })
-      .where(id ? eq(scheduleRuns.id, id) : eq(scheduleRuns.task, task))
-      .run()
+function makeDeps() {
+  return {
+    listSessionsInDay(dayStartMs: number, dayEndMs: number): Array<{ startedAt: number; endedAt: number }> {
+      return getDb()
+        .select({ startedAt: sessions.startedAt, endedAt: sessions.endedAt })
+        .from(sessions)
+        .all()
+        .filter((s) => s.startedAt < dayEndMs && s.endedAt >= dayStartMs)
+    },
+    listRecentSessions(cutoffMs: number, limit: number): Array<{ filePath: string; ingestedAt: number }> {
+      return getDb()
+        .select({ filePath: sessions.filePath, ingestedAt: sessions.ingestedAt })
+        .from(sessions)
+        .orderBy(desc(sessions.ingestedAt))
+        .all()
+        .filter((s) => s.ingestedAt > cutoffMs)
+        .slice(0, limit)
+    },
+    recordRunStart(task: string, startedAt: number): number {
+      const inserted = getDb()
+        .insert(scheduleRuns)
+        .values({ task, status: 'running', startedAt })
+        .returning({ id: scheduleRuns.id })
+        .all()
+      const id = inserted[0]?.id
+      if (typeof id !== 'number') {
+        // 不应发生；返回 -1 让后续 update 走 task 兜底条件
+        return -1
+      }
+      return id
+    },
+    recordRunFinish(
+      id: number | bigint,
+      patch: { status: 'done' | 'failed'; result: string; finishedAt: number; durationMs: number }
+    ): void {
+      const where =
+        typeof id === 'number' && id >= 0 ? eq(scheduleRuns.id, id) : eq(scheduleRuns.task, patch.status)
+      getDb()
+        .update(scheduleRuns)
+        .set({
+          status: patch.status,
+          result: patch.result,
+          finishedAt: patch.finishedAt,
+          durationMs: patch.durationMs
+        })
+        .where(where)
+        .run()
+    }
   }
 }

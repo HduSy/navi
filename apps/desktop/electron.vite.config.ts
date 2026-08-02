@@ -4,7 +4,7 @@ import { resolve } from 'node:path'
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin({ exclude: ['@navi/core', '@navi/brain'] })],
+    plugins: [externalizeDepsPlugin({ exclude: ['@navi/core', '@navi/brain', '@navi/scheduler'] })],
     build: {
       rollupOptions: {
         input: { index: resolve(__dirname, 'src/main/index.ts') }
@@ -12,7 +12,7 @@ export default defineConfig({
     }
   },
   preload: {
-    plugins: [externalizeDepsPlugin({ exclude: ['@navi/core', '@navi/brain'] })],
+    plugins: [externalizeDepsPlugin({ exclude: ['@navi/core', '@navi/brain', '@navi/scheduler'] })],
     build: {
       rollupOptions: {
         input: { index: resolve(__dirname, 'src/preload/index.ts') }

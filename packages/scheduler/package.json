@@ -8,6 +8,9 @@
   "scripts": {
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "@navi/core": "workspace:*"
+  },
   "devDependencies": {
     "@types/node": "^22.10.0"
   }
