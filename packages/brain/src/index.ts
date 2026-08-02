@@ -57,9 +57,24 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
   }
 ]
 
-/** 判断是否走 Anthropic Messages API 协议 */
+/** 判断是否走 Anthropic Messages API 协议。
+ *  规则：baseUrl 含 `/anthropic`（区分大小写）→ anthropic 协议；
+ *  否则一律走 OpenAI 兼容 chat completions。
+ *  这样能正确处理：
+ *   - 真正的 Anthropic / 智谱 anthropic 兼容端点（含 /anthropic）
+ *   - 火山 ARK coding、Together、OpenRouter 等不含 /anthropic 的供应商
+ */
 function isAnthropicProtocol(config: BrainProviderConfig): boolean {
-  return config.provider === 'claude' || config.provider === 'anthropic'
+  return /\/anthropic(\/|$)/i.test(config.baseUrl)
+}
+
+/** 拼接 API URL：
+ *  - 若 baseUrl 已以 /v1 或 /vN 结尾，直接追加 path（/messages 或 /chat/completions）
+ *  - 否则补一个 /v1
+ */
+function buildApiUrl(baseUrl: string, tail: string): string {
+  const root = baseUrl.replace(/\/+$/, '')
+  return /\/v\d+$/.test(root) ? `${root}${tail}` : `${root}/v1${tail}`
 }
 
 /** Anthropic Messages API 调用 */
@@ -68,7 +83,7 @@ async function anthropicChat(
   messages: ChatMessage[],
   opts: { maxTokens?: number; json?: boolean }
 ): Promise<ChatResult> {
-  const url = `${config.baseUrl.replace(/\/$/, '')}/v1/messages`
+  const url = buildApiUrl(config.baseUrl, '/messages')
   // Anthropic 协议：system 单独传，messages 只能有 user/assistant
   const systemMsg = messages.find((m) => m.role === 'system')
   const dialogMsgs = messages.filter((m) => m.role !== 'system')
@@ -123,7 +138,7 @@ async function openaiChat(
   messages: ChatMessage[],
   opts: { maxTokens?: number; json?: boolean }
 ): Promise<ChatResult> {
-  const url = `${config.baseUrl.replace(/\/$/, '')}/chat/completions`
+  const url = buildApiUrl(config.baseUrl, '/chat/completions')
   const body: Record<string, unknown> = {
     model: config.model,
     messages,
@@ -171,7 +186,7 @@ export async function chat(
 }
 
 export async function embed(config: BrainProviderConfig, input: string): Promise<number[]> {
-  const url = `${config.baseUrl.replace(/\/$/, '')}/embeddings`
+  const url = buildApiUrl(config.baseUrl, '/embeddings')
   const res = await fetch(url, {
     method: 'POST',
     headers: {

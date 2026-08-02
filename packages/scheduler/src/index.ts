@@ -37,6 +37,8 @@ export interface SchedulerDeps {
   listSessionsInDay(dayStartMs: number, dayEndMs: number): Array<{ startedAt: number; endedAt: number }>
   /** 返回近期新入库的 session 文件，按 ingestedAt 倒序、限数 */
   listRecentSessions(cutoffMs: number, limit: number): Array<{ filePath: string; ingestedAt: number }>
+  /** 返回指定日内已生成时间线条目的小时集合（用于跳过已生成的小时，避免 LLM 浪费） */
+  listTimelineHoursInDay(dayStartMs: number, dayEndMs: number): number[]
   /** 写一条 schedule_runs（status='running'），返回主键 id */
   recordRunStart(task: string, startedAt: number): number | bigint
   /** 更新一条 schedule_runs（按 id）的状态/结果/完成时间/耗时 */
@@ -44,6 +46,8 @@ export interface SchedulerDeps {
     id: number | bigint,
     patch: { status: 'done' | 'failed'; result: string; finishedAt: number; durationMs: number }
   ): void
+  /** 启动时清理上次崩溃遗留的 status='running' 条目（标记为 failed，附 reason） */
+  recoverStaleRuns(reason?: string): number
 }
 
 /** 引擎选项 */
@@ -78,6 +82,11 @@ export class Scheduler {
 
   start(): void {
     if (this.timer) return
+    // 启动时清理上次崩溃遗留的 running 条目
+    const recovered = this.deps.recoverStaleRuns('进程重启清理')
+    if (recovered > 0) {
+      // 仅打日志，不抛
+    }
     this.firstRunTimer = setTimeout(() => {
       void this.runOnce()
     }, this.opts.firstRunDelayMs)
@@ -120,27 +129,29 @@ export class Scheduler {
     await this.processRecentNewSessions()
   }
 
-  /** 补全当天所有有 session 但还没生成时间线的小时 */
+  /** 补全当天所有有 session 但还没生成时间线的小时（跳过已存在的 hour） */
   private async backfillTodayTimeline(dayStartMs: number): Promise<void> {
     if (!dayStartMs || Number.isNaN(dayStartMs)) return
     const dayEndMs = dayStartMs + 86_400_000 - 1
     const daySessions = this.deps.listSessionsInDay(dayStartMs, dayEndMs)
+    const generatedHours = new Set(this.deps.listTimelineHoursInDay(dayStartMs, dayEndMs))
 
-    const hours = new Set<number>()
+    const pendingHours = new Set<number>()
     for (const s of daySessions) {
       const startH = toLocalHourStart(s.startedAt)
       const endH = toLocalHourStart(s.endedAt)
       let cur = startH
       let guard = 0
       while (cur <= endH && guard < 24) {
-        hours.add(cur)
+        if (!generatedHours.has(cur)) pendingHours.add(cur)
         cur += 3_600_000
         guard++
       }
     }
 
-    const sortedHours = [...hours].sort((a, b) => a - b)
-    // 并行生成所有小时（LLM 调用是 I/O 密集型）
+    if (pendingHours.size === 0) return
+    const sortedHours = [...pendingHours].sort((a, b) => a - b)
+    // 并行生成所有缺失小时（LLM 调用是 I/O 密集型）
     await Promise.all(
       sortedHours.map((h) => this.runTask('timeline', () => this.tasks.generateTimelineForHour(h)))
     )

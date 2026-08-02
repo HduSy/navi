@@ -6,7 +6,7 @@
  */
 
 import { eq, desc } from 'drizzle-orm'
-import { sessions, scheduleRuns } from '@navi/core'
+import { sessions, scheduleRuns, timelineEntries } from '@navi/core'
 import { Scheduler } from '@navi/scheduler'
 import { getDb } from './db.js'
 import {
@@ -69,6 +69,14 @@ function makeDeps() {
         .filter((s) => s.ingestedAt > cutoffMs)
         .slice(0, limit)
     },
+    listTimelineHoursInDay(dayStartMs: number, dayEndMs: number): number[] {
+      return getDb()
+        .select({ hourStart: timelineEntries.hourStart })
+        .from(timelineEntries)
+        .all()
+        .filter((t) => t.hourStart >= dayStartMs && t.hourStart <= dayEndMs)
+        .map((t) => t.hourStart)
+    },
     recordRunStart(task: string, startedAt: number): number {
       const inserted = getDb()
         .insert(scheduleRuns)
@@ -98,6 +106,21 @@ function makeDeps() {
         })
         .where(where)
         .run()
+    },
+    recoverStaleRuns(reason = '进程重启清理'): number {
+      const before = getDb()
+        .select({ id: scheduleRuns.id })
+        .from(scheduleRuns)
+        .where(eq(scheduleRuns.status, 'running'))
+        .all()
+      if (before.length === 0) return 0
+      const now = Date.now()
+      getDb()
+        .update(scheduleRuns)
+        .set({ status: 'failed', result: reason, finishedAt: now, durationMs: 0 })
+        .where(eq(scheduleRuns.status, 'running'))
+        .run()
+      return before.length
     }
   }
 }
