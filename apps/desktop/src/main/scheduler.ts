@@ -5,8 +5,8 @@
  *  - 引擎本身在 @navi/scheduler
  */
 
-import { eq, desc } from 'drizzle-orm'
-import { sessions, scheduleRuns, timelineEntries } from '@navi/core'
+import { eq, desc, asc } from 'drizzle-orm'
+import { sessions, scheduleRuns, timelineEntries, diaries, toLocalDayStart } from '@navi/core'
 import { Scheduler } from '@navi/scheduler'
 import { getDb } from './db.js'
 import {
@@ -76,6 +76,27 @@ function makeDeps() {
         .all()
         .filter((t) => t.hourStart >= dayStartMs && t.hourStart <= dayEndMs)
         .map((t) => t.hourStart)
+    },
+    listDaysWithTimeline(recentDays: number): number[] {
+      const now = Date.now()
+      const earliest = now - recentDays * 86_400_000
+      const rows = getDb()
+        .select({ hourStart: timelineEntries.hourStart })
+        .from(timelineEntries)
+        .orderBy(asc(timelineEntries.hourStart))
+        .all()
+        .filter((t) => t.hourStart >= earliest)
+      // 按本地零点去重
+      const days = new Set<number>()
+      for (const r of rows) days.add(toLocalDayStart(r.hourStart))
+      return [...days].sort((a, b) => a - b)
+    },
+    listExistingDiaryDays(): number[] {
+      return getDb()
+        .select({ date: diaries.date })
+        .from(diaries)
+        .all()
+        .map((r) => r.date)
     },
     recordRunStart(task: string, startedAt: number): number {
       const inserted = getDb()

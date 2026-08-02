@@ -91,7 +91,11 @@ async function anthropicChat(
     model: config.model,
     max_tokens: opts.maxTokens ?? 2048,
     messages: dialogMsgs.map((m) => ({ role: m.role, content: m.content })),
-    ...(systemMsg ? { system: systemMsg.content } : {})
+    ...(systemMsg ? { system: systemMsg.content } : {}),
+    // 显式关闭 thinking：智谱 GLM-5.2 等模型默认开 thinking，
+    // 会把 max_tokens 全部耗在思考上，导致最终 text 内容为空。
+    // thinking 字段是 Anthropic API 扩展，部分兼容供应商忽略它，不影响。
+    thinking: { type: 'disabled' }
   }
   if (opts.json) {
     // Anthropic 没有原生 json mode，用 system 指令引导
@@ -235,3 +239,74 @@ export function defaultBrainConfig(): Record<BrainScope, BrainProviderConfig> {
 }
 
 export const BRAIN_VERSION = '0.1.0'
+
+/* ───────────── JSON 响应解析 helper ─────────────
+ * 智谱 GLM 等模型在 anthropic 协议 + json 引导下，常返回 markdown 代码块
+ * 包裹的 JSON（```json ... ```），导致 JSON.parse 失败。
+ * 这里提供 extractJson + parseJsonResponse，调用方应优先使用。
+ */
+
+/** 从 LLM 文本响应里抽取 JSON 段：
+ *  - 优先匹配 ```json ... ``` 或 ``` ... ``` 代码块
+ *  - 否则匹配首个 `{` 到末尾 `}`（或 `[` 到 `]`）的最大平衡跨度
+ *  - 找不到返回 null
+ */
+export function extractJson(text: string): string | null {
+  if (!text) return null
+  // 1. ```json ... ``` 或 ``` ... ```
+  const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/i)
+  if (fence && fence[1]) {
+    const candidate = fence[1].trim()
+    if (candidate) return candidate
+  }
+  // 2. 整段就是合法 JSON（去前后空白）
+  const trimmed = text.trim()
+  if (/^[[{]/.test(trimmed) && /[\]}]$/.test(trimmed)) {
+    return trimmed
+  }
+  // 3. 找首个 { 或 [ 到对应闭合（用栈匹配，容忍字符串内的括号）
+  const start = trimmed.search(/[{[]/)
+  if (start < 0) return null
+  const openCh = trimmed[start]
+  const closeCh = openCh === '{' ? '}' : ']'
+  let depth = 0
+  let inStr = false
+  let escape = false
+  for (let i = start; i < trimmed.length; i++) {
+    const c = trimmed[i]
+    if (escape) {
+      escape = false
+      continue
+    }
+    if (c === '\\') {
+      escape = true
+      continue
+    }
+    if (c === '"') {
+      inStr = !inStr
+      continue
+    }
+    if (inStr) continue
+    if (c === openCh) depth++
+    else if (c === closeCh) {
+      depth--
+      if (depth === 0) return trimmed.slice(start, i + 1)
+    }
+  }
+  return null
+}
+
+/** 解析 LLM JSON 响应，失败时抛出带原始片段的错误（便于诊断） */
+export function parseJsonResponse<T = unknown>(text: string): T {
+  const jsonStr = extractJson(text)
+  if (!jsonStr) {
+    throw new Error(`LLM 响应里找不到 JSON：${text.slice(0, 200)}`)
+  }
+  try {
+    return JSON.parse(jsonStr) as T
+  } catch (e) {
+    throw new Error(
+      `JSON 解析失败：${e instanceof Error ? e.message : String(e)} | 片段：${jsonStr.slice(0, 200)}`
+    )
+  }
+}

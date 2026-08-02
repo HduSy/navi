@@ -39,6 +39,10 @@ export interface SchedulerDeps {
   listRecentSessions(cutoffMs: number, limit: number): Array<{ filePath: string; ingestedAt: number }>
   /** 返回指定日内已生成时间线条目的小时集合（用于跳过已生成的小时，避免 LLM 浪费） */
   listTimelineHoursInDay(dayStartMs: number, dayEndMs: number): number[]
+  /** 返回最近 N 天里有 timeline 的日期（本地零点 epoch ms） */
+  listDaysWithTimeline(recentDays: number): number[]
+  /** 返回已生成 diary 的日期集合（本地零点 epoch ms） */
+  listExistingDiaryDays(): number[]
   /** 写一条 schedule_runs（status='running'），返回主键 id */
   recordRunStart(task: string, startedAt: number): number | bigint
   /** 更新一条 schedule_runs（按 id）的状态/结果/完成时间/耗时 */
@@ -120,6 +124,10 @@ export class Scheduler {
       await this.runTask('diary', () => this.tasks.generateDiary(todayMs))
     }
 
+    // 补生成近 7 天有 timeline 但还没 diary 的日期
+    // （跨天后当天没机会自动跑，或者之前 diary 失败的回填）
+    await this.backfillMissingDiaries(7)
+
     // 周一凌晨 03:00（10 分钟窗口内）：lint 认知健康检查
     if (now.getDay() === 1 && now.getHours() === 3 && now.getMinutes() < 10) {
       await this.runTask('lint', async () => this.tasks.lintWiki())
@@ -127,6 +135,19 @@ export class Scheduler {
 
     // 持续：对近 30 分钟新入库的 session 跑经验/人物抽取
     await this.processRecentNewSessions()
+  }
+
+  /** 补生成近 N 天有 timeline 但没 diary 的日期 */
+  private async backfillMissingDiaries(recentDays: number): Promise<void> {
+    const existing = new Set(this.deps.listExistingDiaryDays())
+    const candidates = this.deps
+      .listDaysWithTimeline(recentDays)
+      .filter((dayMs) => !existing.has(dayMs))
+    if (candidates.length === 0) return
+    // 串行避免 LLM 并发限流（diary prompt 较大）
+    for (const dayMs of candidates) {
+      await this.runTask('diary', () => this.tasks.generateDiary(dayMs))
+    }
   }
 
   /** 补全当天所有有 session 但还没生成时间线的小时（跳过已存在的 hour） */

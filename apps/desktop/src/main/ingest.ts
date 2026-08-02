@@ -19,7 +19,7 @@ import {
 } from '@navi/core'
 import { eq } from 'drizzle-orm'
 import type { BrainProviderConfig, ChatMessage } from '@navi/brain'
-import { chat } from '@navi/brain'
+import { chat, parseJsonResponse } from '@navi/brain'
 import { getDb } from './db.js'
 import { getWiki } from './wiki-host.js'
 import { getBrain } from './brain-host.js'
@@ -261,7 +261,7 @@ export async function generateTimelineForHour(hourStartMs: number): Promise<{ ok
         content: `涉及项目：${projectList.map(basename).join('、')}\n\n对话记录摘要：\n${digest}`
       }
     ],
-    { maxTokens: 300 }
+    { maxTokens: 4096 }
   )
   const summary = result.content.trim()
   if (!summary) return { ok: false, reason: 'LLM 返回空内容' }
@@ -408,13 +408,18 @@ export async function generateExperiencesForSession(filePath: string): Promise<v
       '每条返回 JSON：{scenario, lesson}。没有则返回 []。不要编造。'
   }
   const sample = content.split('\n').filter(Boolean).slice(0, 60).join('\n')
-  const result = await chat(brain, [sys, { role: 'user', content: sample.slice(0, 8000) }], {
-    json: true,
-    maxTokens: 1024
-  })
+  let result
+  try {
+    result = await chat(brain, [sys, { role: 'user', content: sample.slice(0, 8000) }], {
+      json: true,
+      maxTokens: 4096
+    })
+  } catch {
+    return
+  }
   let items: Array<{ scenario: string; lesson: string }> = []
   try {
-    const parsed = JSON.parse(result.content)
+    const parsed = parseJsonResponse<Array<{ scenario: string; lesson: string }>>(result.content)
     if (Array.isArray(parsed)) items = parsed.filter((x) => x?.scenario && x?.lesson)
   } catch {
     return
@@ -497,13 +502,20 @@ export async function generatePersonsForSession(filePath: string): Promise<void>
       '从这段对话里抽取提到的人物。返回 JSON 数组，每项 {name, aliases, context}。' +
       '只抽真实人名（中文姓名/英文姓名），不要抽角色指代（如"老板""前端"）或工具名。没有则返回 []。'
   }
-  const result = await chat(brain, [sys, { role: 'user', content: text.slice(0, 8000) }], {
-    json: true,
-    maxTokens: 512
-  })
+  let result
+  try {
+    result = await chat(brain, [sys, { role: 'user', content: text.slice(0, 8000) }], {
+      json: true,
+      maxTokens: 4096
+    })
+  } catch {
+    return
+  }
   let items: Array<{ name: string; aliases?: string[]; context?: string }> = []
   try {
-    const parsed = JSON.parse(result.content)
+    const parsed = parseJsonResponse<Array<{ name: string; aliases?: string[]; context?: string }>>(
+      result.content
+    )
     if (Array.isArray(parsed)) items = parsed.filter((x) => x?.name)
   } catch {
     return
@@ -527,7 +539,7 @@ export async function generatePersonsForSession(filePath: string): Promise<void>
             { role: 'system', content: '用一句中文概括这个人在用户工作中的角色，只基于提供的上下文。不确定就说"暂不明确"。' },
             { role: 'user', content: `人名：${item.name}\n上下文：${item.context ?? '(无)'}` }
           ],
-          { maxTokens: 64 }
+          { maxTokens: 2048 }
         )
         roleDraft = roleRes.content.trim()
       } catch {
@@ -603,20 +615,24 @@ export async function generatePersonsForSession(filePath: string): Promise<void>
 
 /* ───────────── LLM 语义层：日记（每晚聚合） ───────────── */
 
-/** dateMs 是本地零点的 epoch ms */
-export async function generateDiary(dateMs: number): Promise<void> {
+/** dateMs 是本地零点的 epoch ms。
+ *  返回 { ok, reason? }：成功 ok=true；任何 early return 都带 reason 便于诊断。
+ *  reason 写入 schedule_runs.result + log.md，让用户能看到为什么没产出。 */
+export async function generateDiary(
+  dateMs: number
+): Promise<{ ok: boolean; reason?: string }> {
   const db = getDb()
   const wiki = getWiki()
   const brain = getBrain('analysis')
-  if (!brain.apiKey) return // 没配大脑就不生成日记，不糊弄
-  const dayStartMs = dateMs
+  const dateStr = toLocalDateStr(dateMs)
+  if (!brain.apiKey) return { ok: false, reason: '未配置大脑 apiKey' }
   const dayEndMs = dateMs + 86_400_000 - 1
   const dayTimelines = db
     .select()
     .from(timelineEntries)
     .all()
-    .filter((t) => t.hourStart >= dayStartMs && t.hourStart <= dayEndMs)
-  if (dayTimelines.length === 0) return
+    .filter((t) => t.hourStart >= dateMs && t.hourStart <= dayEndMs)
+  if (dayTimelines.length === 0) return { ok: false, reason: `${dateStr} 无 timeline` }
   const digest = dayTimelines
     .sort((a, b) => a.hourStart - b.hourStart)
     .map((t) => {
@@ -630,17 +646,24 @@ export async function generateDiary(dateMs: number): Promise<void> {
       '你是 Navi 的分析大脑。基于这一天的每小时时间线，写一篇简短日报。' +
       '返回 JSON：{summary, output, pitfalls, tone}。'
   }
-  const result = await chat(brain, [sys, { role: 'user', content: digest }], {
-    json: true,
-    maxTokens: 512
-  })
-  let parsed: { summary?: string; output?: string; pitfalls?: string; tone?: string } = {}
+  let result
   try {
-    parsed = JSON.parse(result.content)
-  } catch {
-    return
+    result = await chat(brain, [sys, { role: 'user', content: digest }], {
+      json: true,
+      maxTokens: 4096
+    })
+  } catch (e) {
+    wiki.appendLog('lint', `日记 ${dateStr} 失败`, e instanceof Error ? e.message : String(e))
+    return { ok: false, reason: `LLM 调用失败：${e instanceof Error ? e.message : String(e)}` }
   }
-  const dateStr = toLocalDateStr(dateMs)
+  let parsed: { summary?: string; output?: string; pitfalls?: string; tone?: string }
+  try {
+    parsed = parseJsonResponse(result.content)
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    wiki.appendLog('lint', `日记 ${dateStr} JSON 解析失败`, msg.slice(0, 200))
+    return { ok: false, reason: msg.slice(0, 300) }
+  }
   const wikiPath = wiki.write(
     'diary',
     dateStr,
@@ -650,7 +673,7 @@ export async function generateDiary(dateMs: number): Promise<void> {
       type: 'diary',
       createdAt: new Date(dateMs).toISOString(),
       updatedAt: new Date().toISOString(),
-      sourceSessions: dayTimelines.flatMap((t) => JSON.parse(t.sourceSessions) as string[])
+      sourceSessions: [...new Set(dayTimelines.flatMap((t) => JSON.parse(t.sourceSessions) as string[]))]
     },
     `# ${dateStr}\n\n## 总览\n\n${parsed.summary ?? ''}\n\n## 产出\n\n${parsed.output ?? ''}\n\n## 踩坑\n\n${parsed.pitfalls ?? ''}\n\n## 基调\n\n${parsed.tone ?? ''}\n`
   )
@@ -676,6 +699,7 @@ export async function generateDiary(dateMs: number): Promise<void> {
     })
     .run()
   wiki.appendLog('ingest', `日记 ${dateStr}`)
+  return { ok: true }
 }
 
 /* ───────────── 查询统计（供 UI） ───────────── */
