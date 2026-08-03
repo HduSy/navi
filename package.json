@@ -2,7 +2,28 @@
   "name": "navi",
   "private": true,
   "version": "0.1.0",
-  "description": "Navi - your AI work companion that observes, remembers, and grows with you",
+  "description": "Navi — your AI work companion that observes, remembers, and grows with you. Local-first desktop app that turns Claude Code sessions into a living wiki.",
+  "keywords": [
+    "claude-code",
+    "ai-companion",
+    "local-first",
+    "electron",
+    "knowledge-graph",
+    "llm",
+    "wiki",
+    "personal-ai",
+    "react",
+    "typescript"
+  ],
+  "homepage": "https://github.com/HduSy/navi",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/HduSy/navi.git"
+  },
+  "bugs": {
+    "url": "https://github.com/HduSy/navi/issues"
+  },
+  "license": "MIT",
   "type": "module",
   "engines": {
     "node": ">=22",

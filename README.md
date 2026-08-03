@@ -1,8 +1,11 @@
 # Navi
 
+[![License](https://img.shields.io/badge/license-MIT-black.svg)](LICENSE)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-black.svg)](https://github.com/HduSy/navi/pulls)
+
 > Your AI work companion that observes, remembers, and grows with you.
 
-Navi 是一个本地优先的桌面 AI 伙伴。它通过观察你与 Claude Code（以及更多本地工具）的互动，长出自己的人格、技能、经验、习惯、项目认知和社会关系，能对话、能自我调校、能给你回看自己一段时间的总结。
+Navi is a local-first desktop AI companion. By observing your interactions with Claude Code (and more local tools), it grows its own personality, skills, experiences, habits, project awareness, and social relationships — able to chat, self-adjust, and give you a retrospective on your own work over time.
 
 - **本地优先**：所有数据存在 `userData/navi.db` + `userData/wiki/`，零云端
 - **三层记忆架构**（Karpathy LLM Wiki）：Raw Sources（不可变 jsonl）→ Wiki（LLM 维护的 markdown DAG）→ Schema（`navi.md` 工作流配置）
@@ -81,4 +84,4 @@ Navi 启动时会自动从 `~/.claude/settings.json` 读取 Anthropic 配置；�
 
 ## License
 
-Private.
+[MIT](LICENSE) © HduSy
