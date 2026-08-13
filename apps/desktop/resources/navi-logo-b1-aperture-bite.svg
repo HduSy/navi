@@ -2,8 +2,7 @@
   <title id="b1t">Navi · aperture · 环中嵌字 · 设计感</title>
   <desc id="b1d">微冷白底，带缺口的圆环（被右上大圆球咬开），Navi 嵌环中，内圈细刻度环，底部发丝线</desc>
   <defs>
-    <!-- macOS squircle（超椭圆，逼近 n≈5），非圆弧圆角 -->
-    <clipPath id="tile"><path d="M 512,0 C 731.85,0 1024,292.15 1024,512 C 1024,731.85 731.85,1024 512,1024 C 292.15,1024 0,731.85 0,512 C 0,292.15 292.15,0 512,0 Z"/></clipPath>
+    <clipPath id="tile"><rect x="0" y="0" width="1024" height="1024" rx="230"/></clipPath>
     <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1024" gradientUnits="userSpaceOnUse">
       <stop offset="0%" stop-color="#FDFDFE"/>
       <stop offset="100%" stop-color="#F4F6F9"/>
@@ -42,7 +41,5 @@
     <line x1="372" y1="688" x2="604" y2="688" stroke="#CBD5E1" stroke-width="2"/>
   </g>
 
-  <!-- 边缘发丝描边：squircle 形状，内缩 ~6px -->
-  <path d="M 512,6 C 728.85,6 1018,295.15 1018,512 C 1018,728.85 728.85,1018 512,1018 C 295.15,1018 6,728.85 6,512 C 6,295.15 295.15,6 512,6 Z"
-        fill="none" stroke="#CBD5E1" stroke-width="3"/>
+  <rect x="6" y="6" width="1012" height="1012" rx="224" fill="none" stroke="#CBD5E1" stroke-width="3"/>
 </svg>
