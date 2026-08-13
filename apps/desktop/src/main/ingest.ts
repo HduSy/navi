@@ -231,6 +231,10 @@ export async function generateTimelineForHour(hourStartMs: number): Promise<{ ok
   const brain = getBrain('analysis')
 
   const hourEndMs = hourStartMs + 3_600_000
+  // 小时级归纳：以「小时」为切片维度，跨所有与该小时有交集的 session 综合。
+  // 但只取每个 session 在 [hourStart, hourEnd) 时间窗内的消息——避免长 session
+  // 被反复全量喂给每个交集小时，导致时间线雷同条目。
+  // 若该小时内没有任何实际消息（session 只是被定时器/心跳撑着时长）则跳过。
   const hourSessions = db
     .select()
     .from(sessions)
@@ -238,7 +242,9 @@ export async function generateTimelineForHour(hourStartMs: number): Promise<{ ok
     .filter((s) => s.startedAt < hourEndMs && s.endedAt >= hourStartMs)
   if (hourSessions.length === 0) return { ok: false, reason: '该小时无 session' }
 
-  const digest = buildSessionDigest(hourSessions)
+  const digest = buildSessionDigest(hourSessions, hourStartMs, hourEndMs)
+  // 这一小时确实没有任何对话内容：跳过，不写空记录
+  if (!digest.trim() || digest === '(无可用消息)') return { ok: false, reason: '该小时无实际对话内容' }
   const projectList = [...new Set(hourSessions.map((s) => s.projectPath))]
 
   if (!brain.apiKey) return { ok: false, reason: '未配置大脑，跳过' }
@@ -332,18 +338,50 @@ export async function generateTimelineForDay(date: string): Promise<{ generated:
   }
 
   const sortedHours = [...hours].sort((a, b) => a - b)
-  // 并行生成所有小时的时间线（LLM 调用是 I/O 密集型，串行太慢）
-  const results = await Promise.all(sortedHours.map((h) => generateTimelineForHour(h)))
   const generated: number[] = []
   const skipped: number[] = []
-  results.forEach((r, i) => {
-    if (r.ok) generated.push(sortedHours[i]!)
-    else skipped.push(sortedHours[i]!)
-  })
+  // 串行生成（每个小时一次 LLM 调用），避免触发上游限流。
+  // 接受外部传入的并发度，默认 1；批量重生成场景调用方可显式串行。
+  for (const h of sortedHours) {
+    const r = await generateTimelineForHour(h)
+    if (r.ok) generated.push(h)
+    else skipped.push(h)
+  }
   return { generated, skipped }
 }
 
-function buildSessionDigest(sessionRows: Array<{ filePath: string; projectPath: string }>): string {
+/** 重置全部历史时间线：清空 timeline_entries 表后，按所有有 session 的天逐日重生成。
+ *  串行 + 每条间隔避免 LLM 限流。用于修复历史脏数据（旧逻辑下长 session 被跨小时重复归纳）。 */
+export async function regenerateAllTimeline(): Promise<{ days: number; generated: number; skipped: number }> {
+  const db = getDb()
+  // 1) 清空
+  db.delete(timelineEntries).run()
+  // 2) 找出所有有 session 的本地日期
+  const all = db.select({ startedAt: sessions.startedAt }).from(sessions).all()
+  const daySet = new Set<string>()
+  for (const s of all) daySet.add(toLocalDateStr(s.startedAt))
+  const days = [...daySet].sort()
+  // 3) 串行重生成（每天内部也是串行，每条间隔 1.2s 避免上游限流）
+  let totalGen = 0
+  let totalSkip = 0
+  for (const d of days) {
+    const r = await generateTimelineForDay(d)
+    totalGen += r.generated.length
+    totalSkip += r.skipped.length
+    await sleep(1200)
+  }
+  return { days: days.length, generated: totalGen, skipped: totalSkip }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms))
+}
+
+function buildSessionDigest(
+  sessionRows: Array<{ filePath: string; projectPath: string }>,
+  hourStartMs?: number,
+  hourEndMs?: number
+): string {
   const parts: string[] = []
   for (const r of sessionRows.slice(0, 6)) {
     try {
@@ -354,6 +392,11 @@ function buildSessionDigest(sessionRows: Array<{ filePath: string; projectPath: 
       for (const line of lines) {
         try {
           const ev = JSON.parse(line)
+          // 按 [hourStart, hourEnd) 切片：只取落在窗口内的消息
+          if (hourStartMs !== undefined && hourEndMs !== undefined && ev.timestamp) {
+            const t = Date.parse(ev.timestamp)
+            if (Number.isNaN(t) || t < hourStartMs || t >= hourEndMs) continue
+          }
           if (ev.type === 'user' && !ev.isMeta) {
             const c = ev.message?.content
             if (typeof c === 'string' && c.trim() && !c.startsWith('<')) {
@@ -643,8 +686,14 @@ export async function generateDiary(
   const sys: ChatMessage = {
     role: 'system',
     content:
-      '你是 Navi 的分析大脑。基于这一天的每小时时间线，写一篇简短日报。' +
-      '返回 JSON：{summary, output, pitfalls, tone}。'
+      '你是 Navi 的分析大脑。基于这一天的每小时时间线，写一篇结构化日报。\n\n' +
+      '要求：\n' +
+      '- summary：一句话总结今天最有意义的事（不超过 40 字，第二人称口语化）\n' +
+      '- done：今天已完成的事（bullet 列表，每条一句话，写动作而非过程）\n' +
+      '- ongoing：仍在进行中、还没收尾的事（bullet 列表）\n' +
+      '- decisions：需要用户决策的事（bullet 列表，附上简要背景；没有就空数组）\n' +
+      '- todo：还没开始但应该开始的事（bullet 列表，基于今天的脉络推断）\n\n' +
+      '只返回 JSON：{summary: string, done: string[], ongoing: string[], decisions: string[], todo: string[]}。'
   }
   let result
   try {
@@ -656,7 +705,18 @@ export async function generateDiary(
     wiki.appendLog('lint', `日记 ${dateStr} 失败`, e instanceof Error ? e.message : String(e))
     return { ok: false, reason: `LLM 调用失败：${e instanceof Error ? e.message : String(e)}` }
   }
-  let parsed: { summary?: string; output?: string; pitfalls?: string; tone?: string }
+  type ParsedDiary = {
+    summary?: string
+    done?: string[] | string
+    ongoing?: string[] | string
+    decisions?: string[] | string
+    todo?: string[] | string
+    // 兼容旧 LLM 输出
+    output?: string
+    pitfalls?: string
+    tone?: string
+  }
+  let parsed: ParsedDiary
   try {
     parsed = parseJsonResponse(result.content)
   } catch (e) {
@@ -664,6 +724,21 @@ export async function generateDiary(
     wiki.appendLog('lint', `日记 ${dateStr} JSON 解析失败`, msg.slice(0, 200))
     return { ok: false, reason: msg.slice(0, 300) }
   }
+  // 统一成字符串（数组 join 成 - bullet；字符串直接用）
+  const bullets = (v: string[] | string | undefined): string => {
+    if (!v) return ''
+    if (Array.isArray(v)) {
+      return v.map((x) => (x.startsWith('-') ? x : `- ${x}`)).join('\n')
+    }
+    return v
+  }
+  const summary = (parsed.summary ?? '').trim()
+  const done = bullets(parsed.done)
+  const ongoing = bullets(parsed.ongoing)
+  const decisions = bullets(parsed.decisions)
+  const todo = bullets(parsed.todo)
+  // output 列同步写一份「四段 bullet」便于检索/旧 UI fallback
+  const outputCombined = [done, ongoing, decisions, todo].filter(Boolean).join('\n\n')
   const wikiPath = wiki.write(
     'diary',
     dateStr,
@@ -675,25 +750,29 @@ export async function generateDiary(
       updatedAt: new Date().toISOString(),
       sourceSessions: [...new Set(dayTimelines.flatMap((t) => JSON.parse(t.sourceSessions) as string[]))]
     },
-    `# ${dateStr}\n\n## 总览\n\n${parsed.summary ?? ''}\n\n## 产出\n\n${parsed.output ?? ''}\n\n## 踩坑\n\n${parsed.pitfalls ?? ''}\n\n## 基调\n\n${parsed.tone ?? ''}\n`
+    `# ${dateStr}\n\n## 摘要\n\n${summary}\n\n## 今天完成\n\n${done}\n\n## 进行中\n\n${ongoing}\n\n## 待决策\n\n${decisions}\n\n## 还没做\n\n${todo}\n`
   )
   db.insert(diaries)
     .values({
       date: dateMs,
       wikiPath,
-      summary: parsed.summary ?? '',
-      output: parsed.output ?? '',
-      pitfalls: parsed.pitfalls ?? '',
-      tone: parsed.tone ?? '',
+      summary,
+      done,
+      ongoing,
+      decisions,
+      todo,
+      output: outputCombined,
       generatedAt: Date.now()
     })
     .onConflictDoUpdate({
       target: diaries.date,
       set: {
-        summary: parsed.summary ?? '',
-        output: parsed.output ?? '',
-        pitfalls: parsed.pitfalls ?? '',
-        tone: parsed.tone ?? '',
+        summary,
+        done,
+        ongoing,
+        decisions,
+        todo,
+        output: outputCombined,
         generatedAt: Date.now()
       }
     })

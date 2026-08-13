@@ -137,12 +137,14 @@ export class Scheduler {
     await this.processRecentNewSessions()
   }
 
-  /** 补生成近 N 天有 timeline 但没 diary 的日期 */
+  /** 补生成近 N 天「有 timeline 但没 diary」的历史日期（跳过今天）
+   *  今天还未结束，不应被当作历史日补生成日记 */
   private async backfillMissingDiaries(recentDays: number): Promise<void> {
+    const todayMs = fromLocalDateStr(toLocalDateStr(Date.now()))
     const existing = new Set(this.deps.listExistingDiaryDays())
     const candidates = this.deps
       .listDaysWithTimeline(recentDays)
-      .filter((dayMs) => !existing.has(dayMs))
+      .filter((dayMs) => dayMs < todayMs && !existing.has(dayMs))
     if (candidates.length === 0) return
     // 串行避免 LLM 并发限流（diary prompt 较大）
     for (const dayMs of candidates) {
@@ -150,21 +152,28 @@ export class Scheduler {
     }
   }
 
-  /** 补全当天所有有 session 但还没生成时间线的小时（跳过已存在的 hour） */
+  /** 补全当天所有「已结束小时」的 timeline（跳过当前小时与已存在 hour）
+   *  整点封存语义：当前小时还在进行中，不生成草稿；要等到下一整点之后才会被补 */
   private async backfillTodayTimeline(dayStartMs: number): Promise<void> {
     if (!dayStartMs || Number.isNaN(dayStartMs)) return
     const dayEndMs = dayStartMs + 86_400_000 - 1
     const daySessions = this.deps.listSessionsInDay(dayStartMs, dayEndMs)
     const generatedHours = new Set(this.deps.listTimelineHoursInDay(dayStartMs, dayEndMs))
 
+    // 当前小时零点：严格排除当前正在进行的这个小时
+    const nowHourStart = toLocalHourStart(Date.now())
+
     const pendingHours = new Set<number>()
     for (const s of daySessions) {
+      // 把 session 跨越的每个本地整点都纳入候选；最终是否生成由 generateTimelineForHour
+      // 按 [hourStart, hourEnd) 窗口内实际消息决定（无内容的小时会自动跳过）。
       const startH = toLocalHourStart(s.startedAt)
       const endH = toLocalHourStart(s.endedAt)
       let cur = startH
       let guard = 0
       while (cur <= endH && guard < 24) {
-        if (!generatedHours.has(cur)) pendingHours.add(cur)
+        // cur < nowHourStart：只补「已经结束」的小时，当前小时不生成草稿
+        if (cur < nowHourStart && !generatedHours.has(cur)) pendingHours.add(cur)
         cur += 3_600_000
         guard++
       }

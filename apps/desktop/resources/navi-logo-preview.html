@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Navi Logo 概念预览</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Helvetica Neue", system-ui, sans-serif;
+    background: #F4F6F9;
+    color: #334155;
+    min-height: 100vh;
+    padding: 48px 32px 80px;
+  }
+  header { text-align: center; margin-bottom: 36px; }
+  header h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; color: #0F172A; }
+  header p { margin-top: 8px; font-size: 13px; color: #64748B; }
+
+  .section-title { max-width: 1180px; margin: 36px auto 18px; display: flex; align-items: baseline; gap: 14px; }
+  .section-title h2 { font-size: 16px; font-weight: 700; color: #0F172A; letter-spacing: 0.01em; }
+  .section-title .tag { font-size: 11px; color: #94A3B8; font-weight: 700; letter-spacing: 0.1em; }
+  .section-title .line { flex: 1; height: 1px; background: #E2E8F0; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 20px;
+    max-width: 1180px;
+    margin: 0 auto;
+  }
+  .card {
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: 14px;
+    padding: 24px 20px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+  }
+  .card:hover { transform: translateY(-3px); border-color: #94A3B8; box-shadow: 0 14px 36px rgba(15,23,42,.08); }
+  .icon {
+    width: 180px; height: 180px; margin-bottom: 16px;
+    border-radius: 40px; overflow: hidden;
+    background: transparent;
+    box-shadow: 0 2px 10px rgba(15,23,42,.06);
+  }
+  .icon img { width: 100%; height: 100%; display: block; object-fit: cover; }
+  .name { font-size: 15px; font-weight: 700; color: #0F172A; }
+  .tag-sub { margin-top: 3px; font-size: 10px; color: #94A3B8; font-weight: 700; letter-spacing: 0.08em; }
+  .desc { margin-top: 10px; font-size: 12px; line-height: 1.6; color: #64748B; }
+  footer { text-align: center; margin-top: 48px; font-size: 12px; color: #94A3B8; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Navi Logo 概念预览</h1>
+  <p>两组方向 · 浅色工具风图形 · Twitter/Facebook 风字母字标</p>
+</header>
+
+<!-- 第一组：浅色工具风 -->
+<div class="section-title">
+  <h2>浅色工具风 · 简易图形</h2>
+  <span class="tag">MINIMAL · TOOL</span>
+  <span class="line"></span>
+</div>
+<main class="grid">
+  <section class="card">
+    <div class="icon"><img src="navi-logo-m1-aperture-512.png" alt="单点聚焦"></div>
+    <div class="name">单点聚焦</div>
+    <div class="tag-sub">APERTURE</div>
+    <p class="desc">大圆环 + 右上偏心点。最简。</p>
+  </section>
+  <section class="card">
+    <div class="icon"><img src="navi-logo-m2-rings-512.png" alt="同心环"></div>
+    <div class="name">同心环</div>
+    <div class="tag-sub">CONCENTRIC</div>
+    <p class="desc">三道嵌套环 + 中心点。仪表感。</p>
+  </section>
+  <section class="card">
+    <div class="icon"><img src="navi-logo-m3-fold-512.png" alt="折角方块"></div>
+    <div class="name">折角方块</div>
+    <div class="tag-sub">FOLDED BLOCK</div>
+    <p class="desc">斜切方块 + 内嵌白点。字标感。</p>
+  </section>
+</main>
+
+<!-- 第二组：字母字标 - 深底白字 -->
+<div class="section-title">
+  <h2>字母字标 · 深底白字</h2>
+  <span class="tag">SOCIAL · DARK</span>
+  <span class="line"></span>
+</div>
+<main class="grid">
+  <section class="card">
+    <div class="icon"><img src="navi-logo-l1-dark-bold-512.png" alt="n 深底粗体"></div>
+    <div class="name">n · 粗体</div>
+    <div class="tag-sub">BOLD</div>
+    <p class="desc">Twitter/f 那种实心填充，最经典。</p>
+  </section>
+  <section class="card">
+    <div class="icon"><img src="navi-logo-l2-dark-medium-512.png" alt="n 深底中粗+点"></div>
+    <div class="name">n · 描边 + 点</div>
+    <div class="tag-sub">MEDIUM + DOT</div>
+    <p class="desc">描边 n，右下一颗强调点。</p>
+  </section>
+  <section class="card">
+    <div class="icon"><img src="navi-logo-l3-dark-dot-512.png" alt="n 深底嵌点"></div>
+    <div class="name">n · 弧顶嵌点</div>
+    <div class="tag-sub">INLINE DOT</div>
+    <p class="desc">弧顶正中嵌点，像 i 的点睛。</p>
+  </section>
+</main>
+
+<!-- 第二组：字母字标 - 白底灰字 -->
+<div class="section-title">
+  <h2>字母字标 · 白底灰字</h2>
+  <span class="tag">LIGHT · COORDINATED</span>
+  <span class="line"></span>
+</div>
+<main class="grid">
+  <section class="card">
+    <div class="icon"><img src="navi-logo-l4-light-bold-512.png" alt="n 白底粗体"></div>
+    <div class="name">n · 粗体</div>
+    <div class="tag-sub">BOLD</div>
+    <p class="desc">和深底版同形，延续浅色风。</p>
+  </section>
+  <section class="card">
+    <div class="icon"><img src="navi-logo-l5-light-medium-512.png" alt="n 白底中粗+点"></div>
+    <div class="name">n · 描边 + 点</div>
+    <div class="tag-sub">MEDIUM + DOT</div>
+    <p class="desc">描边灰 n + 强调点。</p>
+  </section>
+  <section class="card">
+    <div class="icon"><img src="navi-logo-l6-light-dot-512.png" alt="n 白底嵌点"></div>
+    <div class="name">n · 弧顶嵌点</div>
+    <div class="tag-sub">INLINE DOT</div>
+    <p class="desc">灰 n 弧顶嵌白点。</p>
+  </section>
+</main>
+
+<!-- 第四组：aperture + Navi 文字 -->
+<div class="section-title">
+  <h2>aperture + Navi 文字</h2>
+  <span class="tag">WORDMARK · 4 LAYOUTS</span>
+  <span class="line"></span>
+</div>
+<main class="grid">
+  <section class="card">
+    <div class="icon"><img src="navi-logo-a1-aperture-wordmark-512.png" alt="图上文下"></div>
+    <div class="name">A · 图上文下</div>
+    <div class="tag-sub">STACKED</div>
+    <p class="desc">圆环居上，Navi 横排下方。最经典 lockup。</p>
+  </section>
+  <section class="card">
+    <div class="icon"><img src="navi-logo-a2-aperture-inring-512.png" alt="环中嵌字"></div>
+    <div class="name">B · 环中嵌字</div>
+    <div class="tag-sub">IN RING</div>
+    <p class="desc">Navi 嵌进大圆环正中，环作容器。</p>
+  </section>
+  <section class="card">
+    <div class="icon"><img src="navi-logo-a3-aperture-textdot-512.png" alt="文字替代偏心点"></div>
+    <div class="name">C · 文字作焦点</div>
+    <div class="tag-sub">TEXT AS DOT</div>
+    <p class="desc">Navi 放右上偏心位置，文字本身是焦点。</p>
+  </section>
+  <section class="card">
+    <div class="icon"><img src="navi-logo-a4-aperture-corner-512.png" alt="角标小字"></div>
+    <div class="name">D · 角标小字</div>
+    <div class="tag-sub">CORNER</div>
+    <p class="desc">保留 m1 原图不动，右下角加小字 Navi。最克制。</p>
+  </section>
+</main>
+
+<!-- 第五组：B 设计感升级 -->
+<div class="section-title">
+  <h2>B · 环中嵌字 — 设计感升级</h2>
+  <span class="tag">UPGRADED</span>
+  <span class="line"></span>
+</div>
+<main class="grid">
+  <section class="card">
+    <div class="icon"><img src="navi-logo-a2-aperture-inring-512.png" alt="B 原版"></div>
+    <div class="name">B · 原版</div>
+    <div class="tag-sub">ORIGINAL</div>
+    <p class="desc">环 + 嵌字 + 小球，平铺直叙，对比用。</p>
+  </section>
+  <section class="card" style="border-color:#64748B; box-shadow:0 14px 40px rgba(15,23,42,.12);">
+    <div class="icon"><img src="navi-logo-b1-aperture-bite-512.png" alt="B 升级版"></div>
+    <div class="name">B+ · 设计感升级</div>
+    <div class="tag-sub">UPGRADED ★</div>
+    <p class="desc">圆球放大 r110，咬穿圆环留缺口；内圈虚线刻度环；文字深→浅渐变；底部发丝线。</p>
+  </section>
+</main>
+
+<footer>Navi · 两组方向任选 · 确认后转 .icns 接打包</footer>
+</body>
+</html>

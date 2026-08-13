@@ -2,7 +2,71 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Smiley Sans（得意黑）—— 仅作品牌签名（Logo） */
+@font-face {
+  font-family: 'Smiley Sans';
+  src: url('./assets/fonts/SmileySans-Oblique.ttf.woff2') format('woff2');
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 @layer base {
+  :root {
+    /* 冷调工具型底色 —— OKLCH 感知均匀 */
+    --bg:        oklch(99% 0.002 250);
+    --surface:   oklch(100% 0 0);
+    --surface-2: oklch(97% 0.003 250);
+    --fg:        oklch(18% 0.012 250);
+    --fg-2:      oklch(34% 0.014 250);
+    --muted:     oklch(52% 0.012 250);
+    --faint:     oklch(62% 0.010 250);
+    --border:    oklch(93% 0.004 250);
+    --border-2:  oklch(88% 0.005 250);
+
+    /* 9 域色 — 每页一个色相，色度/亮度统一保持工具感 */
+    --accent-chat:         oklch(55% 0.19 255);
+    --accent-chat-soft:    oklch(93% 0.08 255);
+    --accent-chat-line:    oklch(82% 0.10 255);
+    --accent-timeline:     oklch(62% 0.18 25);
+    --accent-timeline-soft:    oklch(94% 0.08 25);
+    --accent-timeline-line:    oklch(85% 0.10 25);
+    --accent-diary:        oklch(55% 0.18 310);
+    --accent-diary-soft:   oklch(93% 0.08 310);
+    --accent-diary-line:   oklch(82% 0.10 310);
+    --accent-projects:     oklch(55% 0.15 200);
+    --accent-projects-soft:    oklch(94% 0.06 200);
+    --accent-projects-line:    oklch(84% 0.08 200);
+    --accent-wiki:         oklch(57% 0.14 155);
+    --accent-wiki-soft:    oklch(94% 0.06 155);
+    --accent-wiki-line:    oklch(84% 0.08 155);
+    --accent-personality:  oklch(55% 0.18 340);
+    --accent-personality-soft: oklch(93% 0.08 340);
+    --accent-personality-line: oklch(82% 0.10 340);
+    --accent-skills:       oklch(55% 0.16 135);
+    --accent-skills-soft:  oklch(94% 0.06 135);
+    --accent-skills-line:  oklch(84% 0.08 135);
+    --accent-relations:    oklch(62% 0.18 55);
+    --accent-relations-soft:   oklch(94% 0.08 55);
+    --accent-relations-line:   oklch(85% 0.10 55);
+    --accent-brain:        oklch(52% 0.16 270);
+    --accent-brain-soft:   oklch(93% 0.06 270);
+    --accent-brain-line:   oklch(82% 0.08 270);
+
+    /* 默认 accent = 对话（蓝），App.tsx 切换时覆盖 */
+    --accent:      var(--accent-chat);
+    --accent-soft: var(--accent-chat-soft);
+    --accent-line: var(--accent-chat-line);
+
+    /* 语义色 */
+    --ok:     oklch(58% 0.14 155);
+    --warn:   oklch(70% 0.15 70);
+    --danger: oklch(58% 0.18 25);
+
+    --radius:    8px;
+    --radius-sm: 5px;
+  }
+
   html,
   body,
   #root {
@@ -12,17 +76,125 @@
   }
 
   body {
-    @apply bg-white text-black font-sans antialiased;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Segoe UI', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    font-variant-numeric: tabular-nums;
+    font-size: 14.5px;
+    line-height: 1.6;
+  }
+
+  code,
+  pre,
+  .font-mono,
+  input[type='text'],
+  input[type='password'],
+  textarea {
+    font-family: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
   }
 
   ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+    width: 8px;
+    height: 8px;
   }
   ::-webkit-scrollbar-thumb {
-    background: #000;
+    background: oklch(80% 0.005 250);
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: oklch(70% 0.008 250);
   }
   ::-webkit-scrollbar-track {
-    background: #fff;
+    background: transparent;
+  }
+
+  /* 尊重用户偏好：减弱动效 */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+    }
+  }
+
+  /* Navi 颜文字状态省略号动画 */
+  @keyframes navi-dot {
+    0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
+    30% { opacity: 1; transform: translateY(-2px); }
+  }
+}
+
+@layer utilities {
+  /* 隐藏滚动条但仍可滚动——用于聊天消息区 */
+  .hide-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* mono 数字 / 路径专用 */
+  .mono {
+    font-family: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* accent 派生工具类（跟随当前页 --accent） */
+  .text-accent {
+    color: var(--accent);
+  }
+  .bg-accent {
+    background: var(--accent);
+  }
+  .bg-accent-soft {
+    background: var(--accent-soft);
+  }
+  .border-accent {
+    border-color: var(--accent);
+  }
+  .border-accent-line {
+    border-color: var(--accent-line);
+  }
+  .ring-accent-soft {
+    --tw-ring-color: var(--accent-soft);
+  }
+
+  /* 卡片 hover：边框转 accent-line */
+  .card-hover {
+    transition: border-color 0.12s ease, background 0.12s ease;
+  }
+  .card-hover:hover {
+    border-color: var(--accent-line);
+  }
+
+  /* 人格滑条圆形 thumb —— 跟随当前页 accent 上色 */
+  .trait-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--surface);
+    border: 2px solid var(--accent);
+    cursor: grab;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  }
+  .trait-range::-webkit-slider-thumb:active {
+    cursor: grabbing;
+    transform: scale(1.15);
+  }
+  .trait-range::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--surface);
+    border: 2px solid var(--accent);
+    cursor: grab;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
   }
 }

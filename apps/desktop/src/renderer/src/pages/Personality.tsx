@@ -1,4 +1,4 @@
-import { useAsync, PageHeader, Button, Label, formatTime, useDebouncedCallback } from '../components'
+import { useAsync, Label, formatTime, useDebouncedCallback } from '../components'
 import { useState, useEffect } from 'react'
 import type { PersonalityState, PersonalityHistoryRow } from '../types'
 
@@ -20,17 +20,16 @@ export function Personality() {
     if (data) setDims(data.dimensions)
   }, [data])
 
-  if (!data || !dims) return <div className="p-12 text-gray-500">加载中...</div>
+  if (!data || !dims) return <div className="p-12 text-stone-400">加载中...</div>
 
   return (
     <div className="h-full flex flex-col">
-      <PageHeader title="人格" subtitle="Navi 是个什么样的小伙伴" />
-      <div className="flex-1 overflow-auto px-12 py-12">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 max-w-6xl">
+      <div className="flex-1 overflow-auto px-7 py-[22px]">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 max-w-6xl">
           {/* 维度 */}
-          <section>
-            <Label>性格滑条（拖完自动记住）</Label>
-            <div className="mt-6 space-y-6">
+          <section className="border border-stone-300 rounded p-4 bg-cream-200">
+            <h3 className="text-[13px] font-semibold text-stone-400 uppercase tracking-[0.04em] mb-3">当前脾气</h3>
+            <div className="space-y-1">
               {DIMS.map((d) => (
                 <DimSlider
                   key={d.key}
@@ -48,37 +47,40 @@ export function Personality() {
           </section>
 
           {/* 角色介绍 + 历史 */}
-          <section>
-            <RoleEditor initial={data.coreFreeText} onSave={(t) => window.navi.setPersonalityFreeText(t)} />
+          <section className="flex flex-col">
+            <div className="border border-stone-300 rounded p-4 bg-cream-200">
+              <h3 className="text-[13px] font-semibold text-stone-400 uppercase tracking-[0.04em] mb-3">当前语气</h3>
+              <RoleEditor initial={data.coreFreeText} onSave={(t) => window.navi.setPersonalityFreeText(t)} />
+            </div>
             {data.adaptationText && (
-              <>
+              <div className="border border-stone-300 rounded p-4 bg-cream-200 mt-3.5">
                 <Label>Navi 自己摸索出的协作偏好</Label>
-                <div className="border-2 border-black p-4 mt-3">
-                  <p className="leading-relaxed whitespace-pre-wrap text-sm">{data.adaptationText}</p>
-                </div>
-              </>
+                <p className="leading-[1.65] text-[13px] text-stone-600 mt-2.5 whitespace-pre-wrap">{data.adaptationText}</p>
+              </div>
             )}
-            <Label>风格示例</Label>
-            <div className="mt-3 space-y-3">
-              {data.fewShot.length === 0 ? (
-                <p className="text-sm text-gray-500">还没攒下示例，多聊几次 Navi 会自动归纳</p>
-              ) : (
-                data.fewShot.map((f, i) => (
-                  <div key={i} className="border-2 border-black p-3 text-sm">
-                    <p><span className="opacity-50">你：</span>{f.user}</p>
-                    <p className="mt-1"><span className="opacity-50">Navi：</span>{f.navi}</p>
-                  </div>
-                ))
-              )}
+            <div className="border border-stone-300 rounded p-4 bg-cream-200 mt-3.5">
+              <Label>风格示例</Label>
+              <div className="mt-2.5 space-y-2">
+                {data.fewShot.length === 0 ? (
+                  <p className="text-[13px] text-stone-400">还没攒下示例，多聊几次 Navi 会自动归纳</p>
+                ) : (
+                  data.fewShot.map((f, i) => (
+                    <div key={i} className="text-[13px] border-b border-stone-300 last:border-0 pb-2 last:pb-0">
+                      <p className="text-stone-600"><span className="text-stone-400">你：</span>{f.user}</p>
+                      <p className="mt-1 text-stone-600"><span className="text-stone-400">Navi：</span>{f.navi}</p>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           </section>
         </div>
 
         {/* 成长轨迹 */}
         {history && history.length > 0 && (
-          <section className="mt-12 max-w-6xl">
+          <section className="mt-5 max-w-6xl">
             <Label>Navi 的成长轨迹</Label>
-            <div className="mt-3 space-y-2">
+            <div className="mt-3 space-y-1.5">
               {history.map((h) => (
                 <HistoryItem key={h.id} item={h} />
               ))}
@@ -105,12 +107,10 @@ function DimSlider({
   onChange: (v: number) => void
   onCommit: (v: number) => void
 }) {
+  const pct = `${value}%`
   return (
-    <div className="border-2 border-black p-4">
-      <div className="flex items-center justify-between mb-3">
-        <span className="font-black">{label}</span>
-        <span className="font-mono font-black text-accent">{value}</span>
-      </div>
+    <div className="flex items-center gap-3 py-2 border-b border-stone-300 last:border-0">
+      <span className="w-[88px] text-[13px] text-stone-600 shrink-0">{label}</span>
       <input
         type="range"
         min={0}
@@ -118,12 +118,12 @@ function DimSlider({
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
         onMouseUp={(e) => onCommit(Number((e.target as HTMLInputElement).value))}
-        className="w-full accent-black"
+        className="trait-range flex-1 h-1.5 rounded-full appearance-none cursor-pointer"
+        style={{
+          background: `linear-gradient(to right, var(--accent) ${pct}, var(--surface-2) ${pct})`
+        }}
       />
-      <div className="flex justify-between text-xs opacity-50 mt-1">
-        <span>{left}</span>
-        <span>{right}</span>
-      </div>
+      <span className="w-[34px] text-right mono text-xs text-stone-500 shrink-0 tabular-nums">{value}</span>
     </div>
   )
 }
@@ -149,27 +149,27 @@ function RoleEditor({ initial, onSave }: { initial: string; onSave: (t: string) 
   }
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-3">
-        <Label>角色介绍（直接写，自动记住；聊天里说"换个性格"也行）</Label>
-        <span className="text-xs opacity-50">{saved ? '已记住' : '记住中…'}</span>
+    <>
+      <div className="flex items-center justify-between mb-2">
+        <span className="mono text-[11px] text-stone-400">直接写，自动记住；聊天里说「换个性格」也行</span>
+        <span className="mono text-[11px] text-ok">{saved ? '已保存' : '保存中…'}</span>
       </div>
       <textarea
         value={text}
         onChange={(e) => handleChange(e.target.value)}
         rows={4}
-        className="w-full border-2 border-black p-3 text-sm focus:outline-none focus:bg-gray-100"
+        className="w-full border border-transparent rounded-sm p-2.5 text-[13.5px] leading-[1.7] text-stone-600 bg-transparent hover:bg-cream-50 focus:bg-cream-200 focus:border-accent-line focus:outline-none transition-colors resize-none"
         placeholder="描述 Navi 是个什么样的伙伴，比如：像个懂技术的老友，直来直去，偶尔吐槽但靠谱"
       />
-    </div>
+    </>
   )
 }
 
 function HistoryItem({ item }: { item: PersonalityHistoryRow }) {
   return (
-    <div className="border border-black p-3 text-sm flex items-center justify-between">
-      <span>{item.change}</span>
-      <span className="text-xs opacity-50">
+    <div className="border border-stone-300 rounded-sm px-3 py-2.5 bg-cream-200 text-[13px] flex items-center justify-between gap-3">
+      <span className="text-stone-600">{item.change}</span>
+      <span className="mono text-[11px] text-stone-400 shrink-0">
         {item.trigger} · {formatTime(item.createdAt)}
       </span>
     </div>

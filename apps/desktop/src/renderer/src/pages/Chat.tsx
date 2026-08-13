@@ -1,10 +1,13 @@
 import { useEffect, useState, useRef } from 'react'
 import type { ChatMessageRow, SessionStats } from '../types'
-import { PageHeader, Button, Label, formatTime, basename } from '../components'
+import { Button, Label, formatClock, formatTime, basename, NoDrag, DragRegion } from '../components'
 
 interface DisplayMessage extends ChatMessageRow {
   pending?: boolean
 }
+
+// 切 tab 离开后回到 Chat 时，恢复上次的滚动位置
+const SCROLL_KEY = 'navi:chat:scrollTop'
 
 export function Chat() {
   const [stats, setStats] = useState<SessionStats | null>(null)
@@ -23,9 +26,24 @@ export function Chat() {
     void refresh()
   }, [])
 
+  // 首次渲染消息后：如果是切 tab 回来（sessionStorage 有位置），恢复位置；
+  // 如果是首次进入（无位置），滚到底部。
   useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    if (!scrollRef.current || messages.length === 0) return
+    const saved = sessionStorage.getItem(SCROLL_KEY)
+    if (saved !== null) {
+      scrollRef.current.scrollTop = Number(saved)
+    } else {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    }
   }, [messages])
+
+  // 离开页面时保存滚动位置
+  useEffect(() => {
+    return () => {
+      if (scrollRef.current) sessionStorage.setItem(SCROLL_KEY, String(scrollRef.current.scrollTop))
+    }
+  }, [])
 
   async function send(): Promise<void> {
     if (!input.trim() || sending) return
@@ -88,30 +106,26 @@ export function Chat() {
 
   return (
     <div className="h-full flex flex-col">
-      <PageHeader title="对话" subtitle="和 Navi 聊聊，或让它调整自己的脾气" />
-      <div className="flex-1 flex overflow-hidden">
-        <section className="flex-1 flex flex-col">
-          <div ref={scrollRef} className="flex-1 overflow-auto px-12 py-12 space-y-8">
+      <div className="flex-1 flex min-h-0">
+        <section className="flex-1 flex flex-col min-w-0 border-r border-stone-300">
+          <div ref={scrollRef} className="flex-1 overflow-auto px-7 py-[22px] hide-scrollbar">
             {messages.length === 0 ? (
-              <article className="max-w-2xl">
+              <article className="max-w-[560px]">
                 <Label>Navi</Label>
-                <div className="mt-3 border-2 border-black p-6">
-                  <p className="text-lg leading-relaxed">
-                    嗨，我是 Navi。我已经看到你{' '}
-                    <span className="font-black">{stats?.totalSessions ?? '...'}</span>{' '}
-                    次和 AI 一起干活了。
-                    {stats && stats.totalSessions > 0
-                      ? '问我"最近在忙啥""踩过什么坑"，或者说"幽默点"调调我的脾气。'
-                      : '先去「大脑」里让我有个能思考的脑子，我就能开口陪你聊。'}
-                  </p>
-                </div>
+                <h3 className="mt-2.5 text-[24px] font-semibold tracking-[-0.02em] text-stone-700 mb-2.5">嗨，我在这听着。</h3>
+                <p className="text-stone-600 leading-[1.65]">
+                  我已经看到你 <span className="font-semibold text-stone-700">{stats?.totalSessions ?? '...'}</span> 次和 AI 一起干活了。
+                  {stats && stats.totalSessions > 0
+                    ? '问我「最近在忙啥」「踩过什么坑」，或者说「幽默点」调调我的脾气。'
+                    : '先去「大脑」里让我有个能思考的脑子，我就能开口陪你聊。'}
+                </p>
               </article>
             ) : (
               messages.map((m) => <MessageBubble key={m.id} msg={m} />)
             )}
           </div>
-          <div className="border-t border-black px-12 py-6">
-            <div className="flex gap-4 w-full">
+          <DragRegion className="shrink-0 border-t border-stone-300 px-7 py-3">
+            <NoDrag className="flex gap-2 w-full">
               <input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -123,51 +137,44 @@ export function Chat() {
                 }}
                 placeholder={sending ? 'Navi 思考中...' : '和 Navi 说点什么（回车发送）'}
                 disabled={sending}
-                className="flex-1 min-w-0 px-6 py-4 border-2 border-black bg-white text-black font-bold focus:outline-none focus:bg-gray-100 transition-none disabled:opacity-50"
+                className="flex-1 min-w-0 bg-cream-200 border border-stone-300 rounded px-3 py-2 text-[13.5px] text-stone-700 placeholder-stone-400 focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent-soft transition-colors duration-150 disabled:opacity-50"
               />
               <Button onClick={send} disabled={sending || !input.trim()}>
                 {sending ? '...' : '发送'}
               </Button>
-            </div>
-          </div>
+            </NoDrag>
+          </DragRegion>
         </section>
 
-        <aside className="w-80 border-l border-black p-8 overflow-auto">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <Label>采集状态</Label>
-              <h3 className="text-lg font-black mt-1">Navi 看到了</h3>
-            </div>
-            <Button variant="outlined" onClick={refresh}>
-              刷新
-            </Button>
-          </div>
+        <aside className="w-[280px] shrink-0 bg-cream-50 p-[18px] overflow-auto">
           {stats ? (
             <>
-              <div className="grid grid-cols-2 gap-3 mb-8">
+              <div className="grid grid-cols-2 gap-2 mb-5">
                 <Stat label="干活次数" value={stats.totalSessions} />
                 <Stat label="聊过" value={stats.totalMessages} />
                 <Stat label="动手" value={stats.totalToolCalls} />
                 <Stat label="摔跤" value={stats.totalErrors} />
               </div>
               <Label>最近在忙</Label>
-              <div className="space-y-3 mt-3">
+              <div className="mt-2 space-y-1.5">
                 {stats.recent
                   .filter((s) => s.userMessageCount > 0 || s.toolCallCount > 0)
                   .slice(0, 5)
                   .map((s) => (
-                    <div key={s.id} className="border-2 border-black p-3 hover:bg-black hover:text-white transition-none">
-                      <p className="font-bold text-sm truncate">{basename(s.projectPath)}</p>
-                      <p className="text-xs opacity-50 mt-1">{formatTime(s.startedAt)}</p>
-                      <p className="text-xs mt-1">
-                        问了 {s.userMessageCount} 句 · 动了 {s.toolCallCount} 次手
+                    <div
+                      key={s.id}
+                      className="border border-stone-300 rounded-sm px-2.5 py-2 bg-cream-200 card-hover"
+                    >
+                      <p className="mono text-xs text-stone-700 truncate">{basename(s.projectPath)}</p>
+                      <p className="mono text-[11px] text-stone-400 mt-1">
+                        {formatTime(s.startedAt)} · 问了 {s.userMessageCount} 句 · 动了 {s.toolCallCount} 次手
                       </p>
                     </div>
                   ))}
               </div>
             </>
           ) : (
-            <p className="text-sm text-gray-500">加载中...</p>
+            <p className="text-sm text-stone-400">加载中...</p>
           )}
         </aside>
       </div>
@@ -179,34 +186,50 @@ function MessageBubble({ msg }: { msg: DisplayMessage }) {
   const isUser = msg.role === 'user'
   const isAction = msg.routedBrain === 'action'
   return (
-    <article className={`max-w-2xl ${isUser ? 'ml-auto' : ''}`}>
-      <div className="flex items-center gap-3">
-        <Label>{isUser ? '你' : 'Navi'}</Label>
+    <article
+      className={
+        'flex flex-col max-w-[72%] mb-4 ' +
+        (isUser ? 'ml-auto items-end' : 'items-start')
+      }
+    >
+      <div
+        className={
+          'relative px-[13px] py-2.5 rounded border text-[14px] leading-[1.6] break-words transition-colors duration-150 ' +
+          (isAction
+            ? 'bg-accent-soft border-accent-line text-stone-700'
+            : isUser
+              ? 'bg-cream-50 border-stone-300 text-stone-700 rounded-tr-sm'
+              : 'bg-cream-200 border-stone-300 text-stone-700 rounded-tl-sm')
+        }
+      >
         {isAction && (
-          <span className="text-xs font-bold border border-accent text-accent px-2 py-0.5">行动</span>
+          <span className="absolute -top-[9px] right-3 mono text-[10px] tracking-[0.05em] px-[7px] py-[3px] rounded-sm bg-accent-soft border border-accent-line text-accent z-10">
+            行动
+          </span>
         )}
-        {msg.pending && <span className="text-xs opacity-50">发送中...</span>}
+        <p className="whitespace-pre-wrap">{msg.content}</p>
+        {msg.actionTaken && (
+          <p className="text-xs mt-2 border-t border-stone-300 text-stone-400 pt-1.5">已执行：{msg.actionTaken}</p>
+        )}
       </div>
       <div
-        className={`mt-2 border-2 p-4 ${
-          isAction ? 'border-accent' : 'border-black'
-        } ${isUser ? '' : 'hover:bg-black hover:text-white transition-none'}`}
+        className={
+          'flex items-center gap-1.5 mt-1.5 mono text-[11px] text-stone-400 ' +
+          (isUser ? 'justify-end' : 'justify-start')
+        }
       >
-        <p className="leading-relaxed whitespace-pre-wrap">{msg.content}</p>
-        {msg.actionTaken && (
-          <p className="text-xs mt-3 border-t border-current opacity-60 pt-2">已执行：{msg.actionTaken}</p>
-        )}
+        {msg.pending && <span>发送中...</span>}
+        {!msg.pending && <span>{formatClock(msg.createdAt)}</span>}
       </div>
-      {!msg.pending && <p className="text-xs opacity-40 mt-1">{formatTime(msg.createdAt)}</p>}
     </article>
   )
 }
 
 function Stat({ label, value }: { label: string; value: number }) {
   return (
-    <div className="border-2 border-black p-3">
-      <p className="text-xs uppercase tracking-widest opacity-50">{label}</p>
-      <p className="text-2xl font-black mt-1">{value}</p>
+    <div className="border border-stone-300 rounded-sm px-3 py-2.5 bg-cream-200">
+      <div className="mono text-[11px] tracking-[0.04em] text-stone-400">{label}</div>
+      <div className="text-[24px] font-semibold text-stone-700 mt-0.5 tabular-nums">{value.toLocaleString()}</div>
     </div>
   )
 }

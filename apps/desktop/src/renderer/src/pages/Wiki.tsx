@@ -1,4 +1,4 @@
-import { useAsync, PageHeader, Button, Empty, Label, Markdown, Tabs, formatTime, basename, NoDrag } from '../components'
+import { useAsync, Button, Empty, Label, Markdown, Tabs, Tag, formatTime, basename, NoDrag } from '../components'
 import { useState } from 'react'
 import type { WikiPage } from '../types'
 
@@ -51,32 +51,32 @@ export function Wiki() {
 
   return (
     <div className="h-full flex flex-col">
-      <PageHeader
-        title="记忆"
-        subtitle="Navi 脑子里记下的所有事，你也能看能改"
-        action={
-          <NoDrag>
-            <Button variant="outlined" onClick={() => window.navi.rebuildIndex().then(() => reload())}>
-              重新整理
-            </Button>
-          </NoDrag>
-        }
-      />
-
       {!selected ? (
         <>
-          <Tabs
-            tabs={TYPES.map((t) => ({ id: t.id, label: t.label }))}
-            active={type}
-            onChange={(id) => setType(id)}
-          />
-          <div className="flex-1 overflow-auto px-12 py-10">
+          <div className="shrink-0 flex items-center gap-3 px-7 pt-4 pb-2">
+            <div className="flex-1 overflow-x-auto hide-scrollbar min-w-0">
+              <Tabs
+                tabs={TYPES.map((t) => ({ id: t.id, label: t.label }))}
+                active={type}
+                onChange={(id) => setType(id)}
+              />
+            </div>
+            <NoDrag className="shrink-0">
+              <Button variant="outlined" size="sm" onClick={() => window.navi.rebuildIndex().then(() => reload())}>
+                重新整理
+              </Button>
+            </NoDrag>
+          </div>
+          <div className="flex-1 overflow-auto px-7 py-5">
             {loading ? (
-              <p className="text-gray-500">加载中...</p>
+              <p className="text-stone-400">加载中...</p>
             ) : pages.length === 0 ? (
               <Empty text="这一格还空着，Navi 多看看你干活就会填上" />
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 max-w-6xl">
+              <div
+                className="grid gap-3 max-w-6xl"
+                style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}
+              >
                 {pages.map((p) => (
                   <CardItem key={p.path} page={p} onOpen={() => openPage(p)} />
                 ))}
@@ -112,21 +112,17 @@ function CardItem({ page, onOpen }: { page: WikiPage; onOpen: () => void }) {
   return (
     <button
       onClick={onOpen}
-      className="text-left border-2 border-black p-5 transition-none hover:bg-black hover:text-white flex flex-col h-full"
+      className="text-left border border-stone-300 rounded p-3.5 flex flex-col h-full card-hover bg-cream-200"
     >
-      <h3 className="font-black text-lg leading-tight mb-2">{page.frontmatter.title}</h3>
-      {preview && <p className="text-sm leading-relaxed opacity-70 line-clamp-3 mb-4 flex-1">{preview}</p>}
-      <div className="space-y-2 text-xs opacity-60 mt-auto">
-        <div className="flex items-center gap-2">
-          <span>更新于 {formatTime(page.frontmatter.updatedAt)}</span>
-        </div>
+      <h3 className="mono text-sm font-medium text-stone-700 mb-1.5">{page.frontmatter.title}</h3>
+      {preview && <p className="text-[12.5px] leading-[1.55] text-stone-500 line-clamp-3 mb-4 flex-1">{preview}</p>}
+      <div className="space-y-1.5 mono text-[11px] text-stone-400 mt-auto">
+        <div>更新于 {formatTime(page.frontmatter.updatedAt)}</div>
         {sources.length > 0 && (
           <div className="flex items-center gap-1 flex-wrap">
             <span>来自</span>
             {sources.slice(0, 2).map((s, i) => (
-              <span key={i} className="border border-current px-1 py-0.5 font-mono">
-                {basename(s).slice(0, 8)}
-              </span>
+              <Tag key={i}>{basename(s).slice(0, 8)}</Tag>
             ))}
             {sources.length > 2 && <span>等 {sources.length} 个</span>}
           </div>
@@ -160,68 +156,56 @@ function Detail({
   onSave: () => void
   onEditText: (t: string) => void
 }) {
-  const sources = page.frontmatter.sourceSessions ?? []
   return (
     <>
-      <div className="border-b-2 border-black px-12 py-5 flex items-center justify-between">
-        <div className="flex items-center gap-6 min-w-0">
-          <button
-            onClick={onBack}
-            className="font-bold text-sm border-2 border-black px-4 py-2 bg-white text-black hover:bg-black hover:text-white transition-none shrink-0"
-          >
-            ← 返回
-          </button>
+      <div className="shrink-0 bg-cream-50 border-b border-stone-300 px-7 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-3 min-w-0">
+          <NoDrag className="shrink-0">
+            <Button variant="outlined" size="sm" onClick={onBack}>← 返回</Button>
+          </NoDrag>
           <div className="min-w-0">
-            <h3 className="text-xl font-black truncate">{page.frontmatter.title}</h3>
-            <p className="text-xs opacity-50 mt-1">
-              创建 {formatTime(page.frontmatter.createdAt)} · 更新 {formatTime(page.frontmatter.updatedAt)}
-            </p>
+            <h3 className="mono text-base font-medium text-stone-700 truncate">{page.frontmatter.title}</h3>
           </div>
         </div>
         <NoDrag className="flex gap-2 shrink-0">
           {editing ? (
             <>
-              <Button variant="outlined" onClick={onCancelEdit}>取消</Button>
-              <Button onClick={onSave}>保存</Button>
+              <Button variant="outlined" size="sm" onClick={onCancelEdit}>取消</Button>
+              <Button size="sm" onClick={onSave}>保存</Button>
             </>
           ) : (
-            <Button variant="outlined" onClick={onEdit}>编辑</Button>
+            <Button variant="outlined" size="sm" onClick={onEdit}>编辑</Button>
           )}
         </NoDrag>
       </div>
-      <div className="flex-1 overflow-auto px-12 py-10">
+      <div className="flex-1 overflow-auto px-9 py-7">
         <div className="max-w-3xl">
           {editing ? (
             <textarea
               value={editText}
               onChange={(e) => onEditText(e.target.value)}
-              className="w-full min-h-[500px] border-2 border-black p-4 font-mono text-sm focus:outline-none focus:bg-gray-100"
+              className="w-full min-h-[500px] bg-cream-200 border border-stone-300 rounded p-4 mono text-[13px] text-stone-600 focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent-soft transition-colors"
             />
           ) : (
-            <Markdown source={text} />
+            <>
+              <p className="mono text-[11px] text-stone-400 mb-5">
+                创建 {formatTime(page.frontmatter.createdAt)} · 更新 {formatTime(page.frontmatter.updatedAt)}
+              </p>
+              <Markdown source={text} />
+            </>
           )}
 
           {/* 元信息 */}
           {!editing && (
-            <div className="mt-12 pt-8 border-t-2 border-black space-y-6">
-              {sources.length > 0 && (
-                <section>
-                  <Label>出自哪些时刻</Label>
-                  <ul className="mt-3 space-y-1 text-sm">
-                    {sources.map((s, i) => (
-                      <li key={i} className="font-mono text-xs opacity-70 break-all">{basename(s)}</li>
-                    ))}
-                  </ul>
-                </section>
-              )}
+            <div className="mt-8 pt-8 border-t border-stone-300 space-y-3">
               {backlinks.length > 0 && (
                 <section>
                   <Label>被这些记忆引用（{backlinks.length}）</Label>
-                  <ul className="mt-3 space-y-2">
+                  <ul className="mt-3 space-y-1.5">
                     {backlinks.map((b) => (
-                      <li key={b.path} className="border border-black p-3 text-sm">
-                        <p className="font-bold">{b.frontmatter.title}</p>
-                        <p className="text-xs opacity-50 mt-1">{formatTime(b.frontmatter.updatedAt)}</p>
+                      <li key={b.path} className="border border-stone-300 rounded-sm p-3 bg-cream-200">
+                        <p className="mono text-[13px] font-medium text-stone-700">{b.frontmatter.title}</p>
+                        <p className="mono text-[11px] text-stone-400 mt-1">{formatTime(b.frontmatter.updatedAt)}</p>
                       </li>
                     ))}
                   </ul>

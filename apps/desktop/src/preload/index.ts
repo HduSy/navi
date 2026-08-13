@@ -31,6 +31,7 @@ const naviAPI = {
   getTimeline: (date?: string) => ipcRenderer.invoke('navi:getTimeline', date),
   generateTimeline: (hourStart: string) => ipcRenderer.invoke('navi:generateTimeline', hourStart),
   generateTimelineForDay: (date: string) => ipcRenderer.invoke('navi:generateTimelineForDay', date),
+  regenerateAllTimeline: () => ipcRenderer.invoke('navi:regenerateAllTimeline'),
 
   // 日记
   getDiaries: () => ipcRenderer.invoke('navi:getDiaries'),
@@ -64,7 +65,11 @@ const naviAPI = {
   rebuildIndex: () => ipcRenderer.invoke('navi:rebuildIndex'),
 
   // Lint
-  lint: () => ipcRenderer.invoke('navi:lint')
+  lint: () => ipcRenderer.invoke('navi:lint'),
+
+  // 认知同步
+  syncCognition: (force = false) => ipcRenderer.invoke('navi:syncCognition', force),
+  getCognitionSyncStatus: () => ipcRenderer.invoke('navi:getCognitionSyncStatus')
 }
 
 try {

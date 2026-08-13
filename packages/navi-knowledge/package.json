@@ -1,0 +1,26 @@
+{
+  "name": "navi-knowledge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Navi 认知 MCP server —— 让 Claude Code / Codex / OpenCode 等工具通过 MCP 查询、更新 Navi 认知库",
+  "main": "./dist/index.js",
+  "types": "./dist/index.js",
+  "bin": {
+    "navi-knowledge": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node ./dist/index.js",
+    "dev": "tsc -p tsconfig.json --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0"
+  }
+}

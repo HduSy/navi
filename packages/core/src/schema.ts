@@ -52,6 +52,12 @@ export const diaries = sqliteTable('diaries', {
   date: integer('date').primaryKey(),
   wikiPath: text('wiki_path').notNull(),
   summary: text('summary').notNull().default(''),
+  // 五段结构化内容（新版）—— 摘要 / 已完成 / 进行中 / 待决策 / 还没做
+  done: text('done').notNull().default(''),
+  ongoing: text('ongoing').notNull().default(''),
+  decisions: text('decisions').notNull().default(''),
+  todo: text('todo').notNull().default(''),
+  // 旧字段保留做向后兼容（旧日记 fallback），新写入会同步到 output
   output: text('output').notNull().default(''),
   pitfalls: text('pitfalls').notNull().default(''),
   tone: text('tone').notNull().default(''),

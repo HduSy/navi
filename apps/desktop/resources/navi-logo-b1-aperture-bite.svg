@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-labelledby="b1t b1d">
+  <title id="b1t">Navi · aperture · 环中嵌字 · 设计感</title>
+  <desc id="b1d">微冷白底，带缺口的圆环（被右上大圆球咬开），Navi 嵌环中，内圈细刻度环，底部发丝线</desc>
+  <defs>
+    <clipPath id="tile"><rect x="0" y="0" width="1024" height="1024" rx="230"/></clipPath>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1024" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FDFDFE"/>
+      <stop offset="100%" stop-color="#F4F6F9"/>
+    </linearGradient>
+    <!-- 文字微微的深→浅纵向渐变，增加精致感 -->
+    <linearGradient id="text" x1="0" y1="0" x2="0" y2="1" gradientUnits="objectBoundingBox">
+      <stop offset="0%" stop-color="#0F172A"/>
+      <stop offset="100%" stop-color="#334155"/>
+    </linearGradient>
+  </defs>
+
+  <g clip-path="url(#tile)">
+    <rect width="1024" height="1024" fill="url(#bg)"/>
+
+    <!-- 内圈细刻度环（极淡，仪表感） -->
+    <circle cx="488" cy="512" r="246" fill="none" stroke="#94A3B8" stroke-opacity="0.35" stroke-width="2" stroke-dasharray="1.5 10" stroke-linecap="round"/>
+
+    <!-- 主圆环：带缺口（被球咬开）。
+         环心(488,512) r=330。球心角 -42°，断口半宽 ±13.6°（总 27°）。
+         起点角 -56° -> (674,239)，终点角 -28° -> (778,355)，大弧绕过下方。 -->
+    <path d="M 674 239 A 330 330 0 1 0 778 355"
+          fill="none" stroke="#334155" stroke-width="52" stroke-linecap="round"/>
+
+    <!-- 右上圆球（咬住环，焦点）r=52 -->
+    <circle cx="778" cy="250" r="52" fill="#1E293B"/>
+    <!-- 球的高光（玻璃质感点） -->
+    <circle cx="766" cy="238" r="16" fill="#FFFFFF" opacity="0.92"/>
+    <circle cx="763" cy="235" r="6" fill="#FFFFFF"/>
+
+    <!-- Navi 文字嵌环中 -->
+    <text x="488" y="578" text-anchor="middle"
+          font-family="'Smiley Sans','PingFang SC',system-ui,sans-serif"
+          font-size="168" font-weight="700" fill="url(#text)" letter-spacing="3">Navi</text>
+
+    <!-- 底部发丝细线（杂志感） -->
+    <line x1="372" y1="688" x2="604" y2="688" stroke="#CBD5E1" stroke-width="2"/>
+  </g>
+
+  <rect x="6" y="6" width="1012" height="1012" rx="224" fill="none" stroke="#CBD5E1" stroke-width="3"/>
+</svg>

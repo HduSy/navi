@@ -98,6 +98,12 @@ export interface DiaryRow {
   date: number
   wikiPath: string
   summary: string
+  // 五段结构化内容（新版）
+  done: string
+  ongoing: string
+  decisions: string
+  todo: string
+  // 旧字段（保留做向后兼容，旧日记可能仍有值）
   output: string
   pitfalls: string
   tone: string
@@ -204,6 +210,7 @@ export interface NaviAPI {
   getTimeline: (date?: string) => Promise<TimelineEntryRow[] | { entries: TimelineEntryRow[]; hasSessions: boolean }>
   generateTimeline: (hourStartMs: number) => Promise<{ ok: boolean; reason?: string }>
   generateTimelineForDay: (date: string) => Promise<{ generated: number[]; skipped: number[] }>
+  regenerateAllTimeline: () => Promise<{ days: number; generated: number; skipped: number }>
   getDiaries: () => Promise<DiaryRow[]>
   getDiary: (date: string) => Promise<DiaryRow | null>
   generateDiary: (date: string) => Promise<void>
@@ -223,6 +230,26 @@ export interface NaviAPI {
   getWikiLog: () => Promise<string>
   rebuildIndex: () => Promise<boolean>
   lint: () => Promise<{ issues: LintIssue[]; fixed: number }>
+  // 认知同步
+  syncCognition: (force?: boolean) => Promise<{
+    contentHash: string
+    contentLength: number
+    written: string[]
+    skipped: string[]
+    errors: Array<{ id: string; message: string }>
+  }>
+  getCognitionSyncStatus: () => Promise<{
+    targets: Array<{
+      id: string
+      label: string
+      file: string
+      exists: boolean
+      writtenAt: number | null
+    }>
+    lastContentHash: string | null
+    lastRunAt: number | null
+    contentLength: number
+  }>
 }
 
 declare global {

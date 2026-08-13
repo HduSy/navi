@@ -7,6 +7,9 @@ out
 .vite
 build
 
+# Logo 设计迭代过程文件（仅保留定稿 icon.* 和源 SVG）
+apps/desktop/resources/_design/
+
 # 日志
 *.log
 

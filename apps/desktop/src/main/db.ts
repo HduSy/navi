@@ -99,6 +99,10 @@ function initSchema(sqlite: Database.Database): void {
       date INTEGER PRIMARY KEY,
       wiki_path TEXT NOT NULL,
       summary TEXT NOT NULL DEFAULT '',
+      done TEXT NOT NULL DEFAULT '',
+      ongoing TEXT NOT NULL DEFAULT '',
+      decisions TEXT NOT NULL DEFAULT '',
+      todo TEXT NOT NULL DEFAULT '',
       output TEXT NOT NULL DEFAULT '',
       pitfalls TEXT NOT NULL DEFAULT '',
       tone TEXT NOT NULL DEFAULT '',
@@ -246,4 +250,12 @@ function initSchema(sqlite: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_person_mentions ON persons(mention_count);
     CREATE INDEX IF NOT EXISTS idx_chat_created ON chat_messages(created_at);
   `)
+  // 增量迁移：旧 db 缺列就 ALTER ADD（diaries 新增的 done/ongoing/decisions/todo）
+  const diariesCols = sqlite.prepare("PRAGMA table_info(diaries)").all() as Array<{ name: string }>
+  const have = new Set(diariesCols.map((c) => c.name))
+  for (const col of ['done', 'ongoing', 'decisions', 'todo']) {
+    if (!have.has(col)) {
+      sqlite.exec(`ALTER TABLE diaries ADD COLUMN ${col} TEXT NOT NULL DEFAULT ''`)
+    }
+  }
 }

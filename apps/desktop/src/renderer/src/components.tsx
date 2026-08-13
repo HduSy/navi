@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react'
 
 /** 把 epoch ms 转本地日期 YYYY-MM-DD 字符串（renderer 端便捷方法） */
 export function toLocalDateStr(ms: number): string {
@@ -17,9 +17,20 @@ export function fromLocalDateStr(date: string): number {
 }
 
 /** 窗口拖动：用于非交互区域的根容器，使该区可拖动窗口 */
-export function DragRegion({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+export function DragRegion({
+  children,
+  className = '',
+  style
+}: {
+  children?: React.ReactNode
+  className?: string
+  style?: React.CSSProperties
+}) {
   return (
-    <div className={className} style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
+    <div
+      className={className}
+      style={{ WebkitAppRegion: 'drag', ...style } as React.CSSProperties}
+    >
       {children}
     </div>
   )
@@ -34,59 +45,74 @@ export function NoDrag({ children, className = '' }: { children: React.ReactNode
   )
 }
 
-export function PageHeader({
-  title,
-  subtitle,
-  action
-}: {
-  title: string
-  subtitle?: string
-  action?: React.ReactNode
-}) {
-  return (
-    <DragRegion className="border-b-2 border-black px-5 py-1.5 flex items-center justify-between">
-      <div className="flex items-baseline gap-3 flex-wrap">
-        <h2 className="text-xl font-black tracking-tight">{title}</h2>
-        {subtitle && <p className="text-xs text-gray-500">{subtitle}</p>}
-      </div>
-      {action && <NoDrag>{action}</NoDrag>}
-    </DragRegion>
-  )
+/** 页面 accent 9 域映射，用于 setAccent 切换 */
+export type AccentPage =
+  | 'chat'
+  | 'timeline'
+  | 'diary'
+  | 'projects'
+  | 'wiki'
+  | 'personality'
+  | 'skills'
+  | 'relations'
+  | 'brain'
+
+const ACCENT_MAP: Record<AccentPage, { a: string; s: string; l: string }> = {
+  chat:        { a: 'var(--accent-chat)',         s: 'var(--accent-chat-soft)',         l: 'var(--accent-chat-line)' },
+  timeline:    { a: 'var(--accent-timeline)',     s: 'var(--accent-timeline-soft)',     l: 'var(--accent-timeline-line)' },
+  diary:       { a: 'var(--accent-diary)',        s: 'var(--accent-diary-soft)',        l: 'var(--accent-diary-line)' },
+  projects:    { a: 'var(--accent-projects)',     s: 'var(--accent-projects-soft)',     l: 'var(--accent-projects-line)' },
+  wiki:        { a: 'var(--accent-wiki)',         s: 'var(--accent-wiki-soft)',         l: 'var(--accent-wiki-line)' },
+  personality: { a: 'var(--accent-personality)',  s: 'var(--accent-personality-soft)',  l: 'var(--accent-personality-line)' },
+  skills:      { a: 'var(--accent-skills)',       s: 'var(--accent-skills-soft)',       l: 'var(--accent-skills-line)' },
+  relations:   { a: 'var(--accent-relations)',    s: 'var(--accent-relations-soft)',    l: 'var(--accent-relations-line)' },
+  brain:       { a: 'var(--accent-brain)',        s: 'var(--accent-brain-soft)',        l: 'var(--accent-brain-line)' }
 }
 
-/**
- * 标准按钮（统一规格：px-5 py-2.5 text-sm）
- */
+/** 切换当前页 accent：写 :root 上的 --accent / --accent-soft / --accent-line */
+export function setAccent(page: AccentPage): void {
+  const c = ACCENT_MAP[page]
+  if (!c) return
+  const root = document.documentElement
+  root.style.setProperty('--accent', c.a)
+  root.style.setProperty('--accent-soft', c.s)
+  root.style.setProperty('--accent-line', c.l)
+}
+
+/** 标准按钮：hairline 边框 + 工具感 */
 export function Button({
   children,
   onClick,
   disabled,
   variant = 'filled',
-  size = 'md'
+  size = 'md',
+  title
 }: {
   children: React.ReactNode
   onClick?: () => void
   disabled?: boolean
   variant?: 'filled' | 'outlined'
   size?: 'md' | 'sm'
+  title?: string
 }) {
   const base =
     variant === 'filled'
-      ? 'bg-black text-white hover:bg-white hover:text-black'
-      : 'bg-white text-black hover:bg-black hover:text-white'
-  const pad = size === 'sm' ? 'px-3 py-1.5 text-xs' : 'px-5 py-2.5 text-sm'
+      ? 'bg-stone-700 border-stone-700 text-white hover:bg-stone-600 hover:border-stone-600'
+      : 'bg-cream-200 text-stone-600 border-stone-300 hover:bg-cream-50 hover:text-stone-700'
+  const pad = size === 'sm' ? 'px-2.5 py-1 text-xs' : 'px-3.5 py-[7px] text-[13px]'
   return (
     <button
       onClick={onClick}
       disabled={disabled}
-      className={`font-bold border-2 border-black ${pad} ${base} active:bg-gray-200 transition-none disabled:opacity-50`}
+      title={title}
+      className={`font-medium rounded-sm border transition-colors duration-150 ease-organic active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed ${pad} ${base}`}
     >
       {children}
     </button>
   )
 }
 
-/** 小标签按钮（用于 tab/供应商选择，统一 px-3 py-1.5 text-xs） */
+/** 小标签按钮：用于 tab/类型筛选 */
 export function TagButton({
   children,
   onClick,
@@ -99,9 +125,12 @@ export function TagButton({
   return (
     <button
       onClick={onClick}
-      className={`px-3 py-1.5 text-xs font-bold border-2 border-black transition-none ${
-        active ? 'bg-black text-white' : 'bg-white text-black hover:bg-black hover:text-white'
-      }`}
+      className={
+        'px-3 py-1.5 text-xs font-medium rounded-sm border transition-all duration-150 ease-organic ' +
+        (active
+          ? 'bg-accent-soft text-accent border-accent-line'
+          : 'bg-cream-200 text-stone-500 border-stone-300 hover:bg-cream-50 hover:text-stone-600 hover:border-stone-300')
+      }
     >
       {children}
     </button>
@@ -120,31 +149,69 @@ export function Card({
   return (
     <div
       onClick={onClick}
-      className={`border-2 border-black p-4 transition-none ${
-        onClick ? 'cursor-pointer hover:bg-black hover:text-white' : ''
-      } ${active ? 'bg-black text-white' : ''}`}
+      className={
+        'p-3.5 rounded border transition-all duration-150 ease-organic card-hover ' +
+        (active
+          ? 'bg-accent-soft border-accent-line'
+          : 'bg-cream-200 border-stone-300 ' +
+            (onClick ? 'cursor-pointer hover:bg-cream-50' : ''))
+      }
     >
       {children}
     </div>
   )
 }
 
+/** mono 小标签：UPPERCASE + letter-spacing */
 export function Label({ children }: { children: React.ReactNode }) {
-  return <span className="text-xs font-bold uppercase tracking-widest opacity-50">{children}</span>
+  return (
+    <span className="mono text-[11px] tracking-[0.06em] text-stone-400 uppercase">{children}</span>
+  )
+}
+
+/** 小标签：用于元信息（来源、计数等） */
+export function Tag({
+  children,
+  variant = 'default'
+}: {
+  children: React.ReactNode
+  variant?: 'default' | 'accent' | 'ok'
+}) {
+  const cls =
+    variant === 'accent'
+      ? 'text-accent bg-accent-soft border-accent-line'
+      : variant === 'ok'
+        ? 'text-ok border-stone-300 bg-cream-50'
+        : 'text-stone-500 bg-cream-50 border-stone-300'
+  return (
+    <span
+      className={`inline-flex items-center gap-1 text-[11px] font-medium px-[7px] py-0.5 rounded-sm border ${cls}`}
+    >
+      {children}
+    </span>
+  )
+}
+
+/** pill：圆角小药丸，用于次级元信息 */
+export function Pill({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="mono text-[11px] px-[7px] py-0.5 rounded-full bg-stone-100 text-stone-400">
+      {children}
+    </span>
+  )
 }
 
 export function Empty({ text }: { text: string }) {
   return (
-    <div className="flex items-center justify-center h-full p-12">
-      <div className="border-2 border-black p-12">
-        <Label>空</Label>
-        <p className="text-xl font-black mt-2">{text}</p>
+    <div className="flex items-center justify-center h-full p-8">
+      <div className="max-w-sm text-center border border-stone-300 bg-cream-200 rounded p-6">
+        <p className="text-base text-stone-600">{text}</p>
       </div>
     </div>
   )
 }
 
-/** API Key 输入：显示/隐藏切换 + focus 自动全选（统一输入框规格） */
+/** API Key 输入：显示/隐藏切换 + focus 自动全选 */
 export function SecretInput({
   value,
   onChange,
@@ -163,14 +230,14 @@ export function SecretInput({
         onChange={(e) => onChange(e.target.value)}
         onFocus={(e) => e.target.select()}
         placeholder={placeholder}
-        className="flex-1 border-2 border-black px-3 py-2.5 text-sm font-bold focus:outline-none focus:bg-gray-100 transition-none"
+        className="flex-1 bg-cream-200 border border-stone-300 rounded px-3 py-1.5 text-sm text-stone-700 placeholder-stone-400 focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent-soft transition-colors duration-150"
       />
       <TagButton onClick={() => setShow((s) => !s)}>{show ? '隐藏' : '显示'}</TagButton>
     </div>
   )
 }
 
-/** 标准文本输入框（统一规格） */
+/** 标准文本输入框 */
 export function TextInput({
   value,
   onChange,
@@ -192,7 +259,7 @@ export function TextInput({
       onFocus={(e) => e.target.select()}
       placeholder={placeholder}
       list={list}
-      className="w-full border-2 border-black px-3 py-2.5 text-sm font-bold focus:outline-none focus:bg-gray-100 transition-none"
+      className="w-full bg-cream-200 border border-stone-300 rounded px-3 py-1.5 text-sm text-stone-700 placeholder-stone-400 focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent-soft transition-colors duration-150"
     />
   )
 }
@@ -216,6 +283,18 @@ export function useAsync<T>(
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [...deps, nonce])
+
+  // 后台到前台自动 reload：切回窗口时数据可能过期
+  useEffect(() => {
+    function onVis(): void {
+      if (document.visibilityState === 'visible') {
+        setNonce((n) => n + 1)
+      }
+    }
+    document.addEventListener('visibilitychange', onVis)
+    return () => document.removeEventListener('visibilitychange', onVis)
+  }, [])
+
   return { data, loading, reload: () => setNonce((n) => n + 1) }
 }
 
@@ -263,6 +342,17 @@ export function formatTime(ms: number | string): string {
       hour: '2-digit',
       minute: '2-digit'
     })
+  } catch {
+    return String(ms)
+  }
+}
+
+/** 紧凑时间：只取 HH:mm */
+export function formatClock(ms: number | string): string {
+  try {
+    const t = typeof ms === 'string' ? new Date(ms).getTime() : ms
+    const d = new Date(t)
+    return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
   } catch {
     return String(ms)
   }
@@ -325,10 +415,10 @@ export function Markdown({ source }: { source: string }) {
       const text = h[2] ?? ''
       const cls =
         level === 1
-          ? 'text-2xl font-black mt-4 mb-2'
+          ? 'text-[24px] font-semibold tracking-[-0.02em] text-stone-700 mt-6 mb-3'
           : level === 2
-            ? 'text-xl font-black mt-3 mb-2'
-            : 'text-lg font-black mt-2 mb-1'
+            ? 'text-[18px] font-semibold tracking-[-0.01em] text-stone-700 mt-5 mb-2'
+            : 'text-[15px] font-semibold text-stone-600 mt-4 mb-1'
       blocks.push(
         <div key={key++} className={cls}>
           {renderInline(text)}
@@ -342,7 +432,7 @@ export function Markdown({ source }: { source: string }) {
     }
     flushList()
     blocks.push(
-      <p key={key++} className="leading-relaxed my-1.5">
+      <p key={key++} className="leading-[1.75] my-3 text-stone-600 max-w-[64ch]">
         {renderInline(line)}
       </p>
     )
@@ -356,21 +446,21 @@ function renderInline(text: string): React.ReactNode[] {
   return parts.map((p, i) => {
     if (/^\[\[([^\]]+)\]\]$/.test(p)) {
       return (
-        <span key={i} className="font-bold border-b border-current">
+        <span key={i} className="text-accent border-b border-accent-line">
           {p.match(/^\[\[([^\]]+)\]\]$/)?.[1] ?? p}
         </span>
       )
     }
     if (/^\*\*[^*]+\*\*$/.test(p)) {
       return (
-        <strong key={i} className="font-black">
+        <strong key={i} className="font-semibold text-stone-700">
           {p.slice(2, -2)}
         </strong>
       )
     }
     if (/^`[^`]+`$/.test(p)) {
       return (
-        <code key={i} className="font-mono text-sm border border-current px-1">
+        <code key={i} className="mono text-[13px] bg-accent-soft text-accent px-1.5 py-0.5 rounded-sm">
           {p.slice(1, -1)}
         </code>
       )
@@ -379,7 +469,7 @@ function renderInline(text: string): React.ReactNode[] {
   })
 }
 
-/** Tabs 通用组件（用 TagButton 规格统一） */
+/** Tabs 通用组件 */
 export function Tabs({
   tabs,
   active,
@@ -390,19 +480,95 @@ export function Tabs({
   onChange: (id: string) => void
 }) {
   return (
-    <div className="flex flex-wrap border-b-2 border-black">
+    <div className="flex flex-wrap gap-1.5">
       {tabs.map((t) => (
         <button
           key={t.id}
           onClick={() => onChange(t.id)}
-          className={`px-4 py-2.5 text-sm font-bold border-r border-black transition-none ${
-            active === t.id ? 'bg-black text-white' : 'bg-white text-black hover:bg-black hover:text-white'
-          }`}
+          className={
+            'px-3 py-1.5 text-xs font-medium rounded-sm border transition-all duration-150 ease-organic ' +
+            (active === t.id
+              ? 'bg-accent-soft text-accent border-accent-line'
+              : 'bg-cream-200 text-stone-500 border-stone-300 hover:bg-cream-50 hover:text-stone-600')
+          }
         >
           {t.label}
-          {t.count !== undefined && <span className="text-xs opacity-50 ml-2">{t.count}</span>}
+          {t.count !== undefined && <span className="ml-1 opacity-70">{t.count}</span>}
         </button>
       ))}
+    </div>
+  )
+}
+
+/**
+ * FitText —— 自适应字号，保证内容始终单行展示。
+ * 测量真实渲染宽度，超出容器时按比例缩小字号（不小于 min）。
+ */
+export function FitText({
+  children,
+  max = 22,
+  min = 12,
+  className = ''
+}: {
+  children: string
+  max?: number
+  min?: number
+  className?: string
+}) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [size, setSize] = useState(max)
+
+  useLayoutEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+    const parent = container.parentElement
+    if (!parent) return
+
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    function recompute(): void {
+      const el = containerRef.current
+      if (!el) return
+      const p = el.parentElement
+      if (!p) return
+      // 父级 clientWidth 是 grid cell 的实际可用宽度
+      const avail = p.clientWidth
+      if (avail <= 0) return
+
+      const style = getComputedStyle(el)
+      // 用 canvas 测 max 字号下文本宽度，避免 DOM 闪烁
+      ctx!.font = `${style.fontWeight} ${max}px ${style.fontFamily}`
+      const textWidth = ctx!.measureText(children).width
+      if (textWidth <= avail) {
+        setSize(max)
+        return
+      }
+      // 按比例缩放：avail / textWidth * max，floor 到 0.5px，clamp 到 [min, max]
+      const scaled = Math.floor(((avail / textWidth) * max) * 2) / 2
+      setSize(Math.max(min, Math.min(max, scaled)))
+    }
+
+    recompute()
+    const ro = new ResizeObserver(recompute)
+    ro.observe(parent)
+    return () => ro.disconnect()
+  }, [children, max, min])
+
+  return (
+    <div
+      ref={containerRef}
+      className={className}
+      style={{
+        fontSize: `${size}px`,
+        lineHeight: 1.2,
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis'
+      }}
+    >
+      {children}
     </div>
   )
 }

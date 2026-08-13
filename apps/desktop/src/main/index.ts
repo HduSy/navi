@@ -4,12 +4,13 @@ import { fileURLToPath } from 'node:url'
 import fs from 'node:fs'
 import { getDb } from './db.js'
 import { getWiki } from './wiki-host.js'
-import { ingestAllSessions, getSessionStats, generateTimelineForHour, generateTimelineForDay, generateDiary, generateExperiencesForSession, generatePersonsForSession } from './ingest.js'
+import { ingestAllSessions, getSessionStats, generateTimelineForHour, generateTimelineForDay, regenerateAllTimeline, generateDiary, generateExperiencesForSession, generatePersonsForSession } from './ingest.js'
 import { sendMessage, getRecentMessages } from './dialogue.js'
 import { getPersonality, setPersonalityDimensions, setPersonalityFreeText, type PersonalityDimensions } from './personality.js'
 import { getBrain, getAllBrain, getClaudeConfigStatus } from './brain-host.js'
 import { lintWiki } from './lint.js'
 import { startScheduler } from './scheduler.js'
+import { initCognitionSync, runCognitionSync, getCognitionSyncStatus } from './cognition-sync.js'
 import {
   projects,
   sessions,
@@ -47,6 +48,7 @@ process.on('uncaughtException', (e: NodeJS.ErrnoException) => {
 })
 
 function createWindow(): void {
+  const iconPath = join(__dirname, '../../resources/icon.png')
   const win = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -55,6 +57,7 @@ function createWindow(): void {
     title: 'Navi',
     backgroundColor: '#ffffff',
     titleBarStyle: 'hiddenInset',
+    icon: fs.existsSync(iconPath) ? iconPath : undefined,
     webPreferences: {
       preload: join(__dirname, '../preload/index.mjs'),
       contextIsolation: true,
@@ -126,6 +129,7 @@ ipcMain.handle('navi:getTimeline', (_e, date?: string) => {
 })
 ipcMain.handle('navi:generateTimeline', (_e, hourStartMs: number) => generateTimelineForHour(hourStartMs))
 ipcMain.handle('navi:generateTimelineForDay', (_e, date: string) => generateTimelineForDay(date))
+ipcMain.handle('navi:regenerateAllTimeline', () => regenerateAllTimeline())
 
 // 日记
 ipcMain.handle('navi:getDiaries', () =>
@@ -222,6 +226,10 @@ ipcMain.handle('navi:rebuildIndex', () => {
 // Lint
 ipcMain.handle('navi:lint', () => lintWiki())
 
+// 认知同步（导出到各 AI 工具全局上下文）
+ipcMain.handle('navi:syncCognition', (_e, force = false) => runCognitionSync(force))
+ipcMain.handle('navi:getCognitionSyncStatus', () => getCognitionSyncStatus())
+
 /* ───────────── 启动 ───────────── */
 
 void app.whenReady().then(() => {
@@ -235,9 +243,46 @@ void app.whenReady().then(() => {
     const r = ingestAllSessions()
     if (r.upserted > 0) safeLog(`[navi] scheduled ingest: +${r.upserted} updated`)
   }, 5 * 60 * 1000)
+
+  // 认知同步：分钟级 hash 增量，内容变化才写目标文件
+  initCognitionSync(app.getPath('userData'))
+  const syncCognition = (): void => {
+    try {
+      const r = runCognitionSync()
+      if (r.written.length > 0) {
+        safeLog(`[navi] cognition sync: +${r.written.length} written (${r.written.join(', ')})`)
+      }
+    } catch (e) {
+      safeLog('[navi] cognition sync error:', e)
+    }
+  }
+  // 启动后先同步一次（延迟 8s 避开启动高峰），之后每 60s 检查
+  setTimeout(syncCognition, 8_000)
+  setInterval(syncCognition, 60_000)
+
   startScheduler()
 
+  // 一次性修复历史脏时间线（旧逻辑下长 session 被跨小时重复归纳）。
+  // 用 userData 下的标记文件保证只跑一次。延迟 60 秒避开 scheduler 启动期 LLM 高峰。
+  // 失败不写标记文件，下次启动会自动重试。
+  const regenFlag = join(app.getPath('userData'), '.timeline-v2-regen-done')
+  if (!fs.existsSync(regenFlag)) {
+    setTimeout(() => {
+      void regenerateAllTimeline()
+        .then((r) => {
+          safeLog(`[navi] timeline v2 regenerate done: days=${r.days} generated=${r.generated} skipped=${r.skipped}`)
+          try { fs.writeFileSync(regenFlag, String(Date.now())) } catch { /* ignore */ }
+        })
+        .catch((e) => safeLog('[navi] timeline v2 regenerate failed (will retry next launch):', e))
+    }, 60_000)
+  }
+
   createWindow()
+  // dev 模式下主动设置 Dock 图标（macOS 打包后由 .icns 接管，无需此调用）
+  if (process.platform === 'darwin' && !app.isPackaged) {
+    const dockIcon = join(__dirname, '../../resources/icon.png')
+    if (fs.existsSync(dockIcon)) app.dock?.setIcon(dockIcon)
+  }
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
