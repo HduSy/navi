@@ -30,14 +30,6 @@ export function Brain() {
   const { data: all, reload } = useAsync(() => window.navi.getAllBrain())
   const { data: status } = useAsync(() => window.navi.getClaudeConfigStatus())
   const { data: secretOk } = useAsync(() => window.navi.getSecretProtectionStatus())
-  const { data: customizedMap } = useAsync(async () => {
-    const [a, d, c] = await Promise.all([
-      window.navi.isBrainCustomized('analysis'),
-      window.navi.isBrainCustomized('dialogue'),
-      window.navi.isBrainCustomized('action')
-    ])
-    return { analysis: a, dialogue: d, action: c } as Record<Scope, boolean>
-  })
   const [editing, setEditing] = useState<Scope | null>(null)
 
   return (
@@ -78,7 +70,6 @@ export function Brain() {
           {/* 三 scope 卡片：点击进入编辑 */}
           {SCOPES.map((s) => {
             const cfg = all?.[s.key]
-            const isCustom = customizedMap?.[s.key] === true
             return (
               <article
                 key={s.key}
@@ -86,12 +77,7 @@ export function Brain() {
                 className="border border-stone-300 rounded p-4 bg-cream-200 mb-3 card-hover cursor-pointer"
               >
                 <header className="flex items-baseline justify-between mb-1">
-                  <div className="flex items-baseline gap-2">
-                    <h4 className="text-[15px] font-semibold text-stone-700">{s.label}</h4>
-                    <span className="mono text-[10px] px-1.5 py-0.5 rounded-sm border border-stone-300 bg-cream-50 text-stone-500">
-                      {isCustom ? '自定义' : '默认（Claude）'}
-                    </span>
-                  </div>
+                  <h4 className="text-[15px] font-semibold text-stone-700">{s.label}</h4>
                   <span className="mono text-[11px] text-stone-400">{s.key} · 点击配置 →</span>
                 </header>
                 <p className="text-[12.5px] text-stone-500 mb-3.5">{s.desc}</p>
