@@ -126,6 +126,17 @@
     0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
     30% { opacity: 1; transform: translateY(-2px); }
   }
+
+  /* Drawer 入场：右侧滑入（挂载帧即从屏外开始，无中间空白态） */
+  @keyframes navi-drawer-in {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
+  }
+  /* Drawer 遮罩入场 */
+  @keyframes navi-drawer-fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
 }
 
 @layer utilities {

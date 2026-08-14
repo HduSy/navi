@@ -30,6 +30,9 @@ import { PROVIDER_PRESETS } from '@navi/brain'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const isDev = !app.isPackaged
 
+// dev 模式开 CDP 调试端口（截图自动化 / DevTools 调试用），打包版不带
+if (isDev) app.commandLine.appendSwitch('remote-debugging-port', '9223')
+
 /** 安全日志：stdout 管道关闭时（dev server 退出）不抛 EPIPE */
 function safeLog(...args: unknown[]): void {
   try {

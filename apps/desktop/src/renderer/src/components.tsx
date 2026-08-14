@@ -37,9 +37,17 @@ export function DragRegion({
 }
 
 /** 标记某元素为不可拖动（按钮/输入等交互元素需包裹） */
-export function NoDrag({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+export function NoDrag({
+  children,
+  className = '',
+  style
+}: {
+  children: React.ReactNode
+  className?: string
+  style?: React.CSSProperties
+}) {
   return (
-    <div className={className} style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+    <div className={className} style={{ WebkitAppRegion: 'no-drag', ...style } as React.CSSProperties}>
       {children}
     </div>
   )

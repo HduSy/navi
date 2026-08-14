@@ -33,7 +33,7 @@ export function Brain() {
   const [editing, setEditing] = useState<Scope | null>(null)
 
   return (
-    <div className="h-full flex flex-col relative">
+    <div className="h-full flex flex-col">
       <div className="flex-1 overflow-auto px-7 py-[22px]">
         <div className="w-full">
           {/* Claude settings.json 状态（只读 fallback 来源） */}
@@ -129,13 +129,6 @@ function BrainConfigSheet({
   const scopeInfo = SCOPES.find((s) => s.key === scope)!
   const { data: presets } = useAsync(() => window.navi.getProviderPresets())
   const { data: isCustom } = useAsync(() => window.navi.isBrainCustomized(scope))
-
-  // 入场过渡：挂载后下一帧切到 visible，让 CSS transition 生效
-  const [visible, setVisible] = useState(false)
-  useEffect(() => {
-    const raf = requestAnimationFrame(() => setVisible(true))
-    return () => cancelAnimationFrame(raf)
-  }, [])
 
   // 表单 state
   const [protocol, setProtocol] = useState<WireProtocol>(
@@ -260,21 +253,20 @@ function BrainConfigSheet({
   }
 
   return (
-    <div className="absolute inset-0 z-40 flex pointer-events-none">
-      {/* 遮罩：opacity 过渡 */}
+    <div className="fixed inset-0 z-50 flex pointer-events-none">
+      {/* 遮罩：延迟 100ms 淡入，与抽屉同时（240ms）结束 */}
       <div
         onClick={onClose}
-        className={
-          'flex-1 bg-black/20 transition-opacity duration-200 ease-organic ' +
-          (visible ? 'opacity-100 pointer-events-auto' : 'opacity-0')
-        }
+        className="flex-1 bg-black/20 pointer-events-auto"
+        style={{ animation: 'navi-drawer-fade 140ms ease-out 100ms both' }}
       />
-      {/* 抽屉：translateX 滑入 */}
+      {/* 抽屉：从右滑入，will-change 预分配合成层，挂载帧即从屏外开始 */}
       <NoDrag
-        className={
-          'w-[420px] shrink-0 bg-cream-50 border-l border-stone-300 flex flex-col transition-transform duration-200 ease-organic pointer-events-auto ' +
-          (visible ? 'translate-x-0' : 'translate-x-full')
-        }
+        className="w-[420px] shrink-0 bg-cream-50 border-l border-stone-300 flex flex-col pointer-events-auto"
+        style={{
+          animation: 'navi-drawer-in 240ms cubic-bezier(0.2, 0, 0, 1) both',
+          willChange: 'transform'
+        }}
       >
         <header className="shrink-0 flex items-center justify-between px-5 pt-3 pb-2 border-b border-stone-300">
           <div className="flex items-baseline gap-2">
