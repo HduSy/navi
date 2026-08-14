@@ -144,7 +144,9 @@ function EntryBody({ entry }: { entry: TimelineEntryRow }) {
 }
 
 function TimelineRow({ item, isLast, nowHourStart, showAsDayEnd }: { item: TimelineItem; isLast: boolean; nowHourStart: number; showAsDayEnd?: boolean }) {
-  const localHour = showAsDayEnd && item.kind === 'entry' ? formatHourEnd(item.hourStart) : formatHourLocal(item.hourStart)
+  // 占位锚点=观察中时段的结束整点，跨到次日 0 点时在当天视角下显示 24:00
+  const localHour =
+    item.kind === 'pending' ? formatPendingHour(item.hourStart) : showAsDayEnd ? formatHourEnd(item.hourStart) : formatHourLocal(item.hourStart)
   const isCurrentHour = item.hourStart === nowHourStart
   const isPast = item.hourStart < nowHourStart
 
@@ -228,4 +230,11 @@ function formatHourEnd(hourStartMs: number): string {
   } catch {
     return String(hourStartMs)
   }
+}
+
+/** 占位锚点=下一整点；锚点落在本地 0 点只可能是「今天 23 点档」跨到了次日 0 点，当天视角下显示为当天的最后一刻 24:00（过了 0 点视图会自动翻到新的一天，0 点届时才是新一天的起点） */
+function formatPendingHour(hourStartMs: number): string {
+  const d = new Date(hourStartMs)
+  if (d.getHours() === 0) return '24:00'
+  return formatHourLocal(hourStartMs)
 }
