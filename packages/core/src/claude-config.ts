@@ -18,8 +18,8 @@ const SETTINGS_PATH = path.join(os.homedir(), '.claude', 'settings.json')
 
 /** 剥掉 model id 里的窗口/上下文后缀（如 glm-5.2[1M] -> glm-5.2）。
  *  这是 Claude Code 内部的标记语法，供应商 API 不认；Navi 调用上游时要剥掉。 */
-function stripModelSuffix(m: string): string {
-  if (!m) return m
+function stripModelSuffix(m: string | undefined): string {
+  if (!m) return ''
   // 去掉 [xxx] 后缀（如 [1M] [200K]）以及可能的 (xxx) 标注
   return m.replace(/\s*[[（(][^\])}]*[\])）]\s*$/g, '').trim() || m
 }

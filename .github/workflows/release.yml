@@ -1,0 +1,45 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build + Publish GitHub Release
+    # macos-latest = arm64 (Apple Silicon)，与本地产物一致（arm64 dmg/zip），
+    # 原生编译 better-sqlite3，无需交叉编译
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # pnpm 会为所有平台留断符号链接（@esbuild/aix-ppc64 等），
+      # electron-builder 的 @electron/rebuild 遍历时撞上会 ENOENT，见 docs/BUILD.md
+      - name: Clean broken pnpm symlinks
+        run: find node_modules/.pnpm/node_modules -maxdepth 3 -type l ! -exec test -e {} \; -delete
+
+      # 无签名证书：强制跳过代码签名（runner 没有 Developer ID 证书）。
+      # 之后想签名/公证：在 repo Secrets 里加 CSC_LINK / CSC_KEY_PASSWORD 后
+      # 去掉下面的 CSC_IDENTITY_AUTO_DISCOVERY，electron-builder 会自动签名。
+      - name: Package + Publish
+        working-directory: apps/desktop
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: pnpm dist -- --publish always

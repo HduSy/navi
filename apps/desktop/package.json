@@ -14,7 +14,11 @@
   "build": {
     "appId": "com.hbusy.navi",
     "productName": "Navi",
-    "publish": null,
+    "publish": {
+      "provider": "github",
+      "owner": "HduSy",
+      "repo": "navi"
+    },
     "directories": {
       "buildResources": "resources"
     },

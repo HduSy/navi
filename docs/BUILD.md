@@ -73,6 +73,46 @@ dist/
   *.blockmap                    # 增量更新用
 ```
 
+## CI / 发版（GitHub Actions）
+
+仓库配了两套 workflow（`.github/workflows/`）：
+
+| workflow | 触发 | 作用 |
+|---|---|---|
+| `ci.yml` | push 到 main / PR | ubuntu 上跑 `pnpm typecheck` + `pnpm build`，防回归 |
+| `release.yml` | 推 `v*` tag（也可手动 Run workflow） | macOS arm64 runner 打 dmg/zip，自动建 GitHub Release |
+
+### 发版流程
+
+版本号以 `apps/desktop/package.json` 的 `version` 为准（当前 `0.1.0`）。发版时：
+
+```bash
+git tag v0.1.0          # 版本号要和 package.json 一致
+git push origin v0.1.0
+```
+
+push 后 `release.yml` 自动构建并创建 GitHub Release，附上 `Navi-<ver>-arm64.dmg`、
+`Navi-<ver>-arm64-mac.zip` 及 blockmap。产物**未签名**（见常见问题 #1），
+下载安装需手动绕过 Gatekeeper。
+
+### 发版 workflow 干了什么
+
+1. `macos-latest`（arm64 runner，Apple Silicon）——与本机架构一致，原生编译
+   `better-sqlite3`，无需交叉编译
+2. `pnpm install --frozen-lockfile`（lockfile 已入库）
+3. 清理 pnpm 跨平台断符号链接（常见问题 #2，否则 rebuild 报 ENOENT）
+4. `electron-builder --publish always` + `GH_TOKEN` 自动建 Release 传产物
+
+### 代码签名（可选）
+
+runner 上没有 Developer ID 证书，workflow 用 `CSC_IDENTITY_AUTO_DISCOVERY=false`
+强制跳过签名。若想发布签名 + 公证的版本：
+
+1. 申请 Apple Developer 账号 + `Developer ID Application` 证书
+2. 把证书导出为 `.p12`，在 repo Secrets 配 `CSC_LINK`（base64）与 `CSC_KEY_PASSWORD`
+3. 去掉 `release.yml` 里 `CSC_IDENTITY_AUTO_DISCOVERY` 那行，electron-builder 会自动签名
+4. 需要公证再配 `APPLE_ID` / `APPLE_APP_SPECIFIC_PASSWORD` / `APPLE_TEAM_ID`
+
 ## 常见问题
 
 ### 1. 未签名导致「无法打开，因为 Apple 无法检查其是否包含恶意软件」

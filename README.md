@@ -161,13 +161,15 @@ Navi 启动时会自动从 `~/.claude/settings.json` 读取 Anthropic 配置；�
 node scripts/capture-screenshots.mjs      # 需先 pnpm dev（CDP 驱动自动截图）
 ```
 
-## 打包
+## 打包 & 发版
 
 ```bash
-cd apps/desktop && pnpm dist              # 产出 dist/Navi-*.dmg 与 mac-arm64/Navi.app
+cd apps/desktop && pnpm dist              # 本地打包：产出 dist/Navi-*.dmg 与 mac-arm64/Navi.app
+git tag v0.1.0 && git push origin v0.1.0  # 触发 GitHub Actions 自动构建并发 GitHub Release
 ```
 
-详见 [docs/BUILD.md](docs/BUILD.md)。
+CI（typecheck + build）与发版（tag 触发）见 [.github/workflows](.github/workflows)，
+完整打包/发版流程见 [docs/BUILD.md](docs/BUILD.md)。
 
 ## 数据位置
 
