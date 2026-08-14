@@ -7,7 +7,7 @@ import { getWiki } from './wiki-host.js'
 import { ingestAllSessions, getSessionStats, generateTimelineForHour, generateTimelineForDay, regenerateAllTimeline, generateDiary, generateExperiencesForSession, generatePersonsForSession } from './ingest.js'
 import { sendMessage, getRecentMessages } from './dialogue.js'
 import { getPersonality, setPersonalityDimensions, setPersonalityFreeText, type PersonalityDimensions } from './personality.js'
-import { getBrain, getAllBrain, getClaudeConfigStatus } from './brain-host.js'
+import { getBrain, getAllBrain, getClaudeConfigStatus, saveBrainConfig, clearBrainConfig, isBrainCustomized, getSecretProtectionStatus } from './brain-host.js'
 import { lintWiki } from './lint.js'
 import { startScheduler } from './scheduler.js'
 import { initCognitionSync, runCognitionSync, getCognitionSyncStatus } from './cognition-sync.js'
@@ -24,7 +24,7 @@ import {
   fromLocalDateStr
 } from '@navi/core'
 import { eq, desc } from 'drizzle-orm'
-import type { BrainScope } from '@navi/brain'
+import type { BrainScope, BrainProviderConfig } from '@navi/brain'
 import { PROVIDER_PRESETS } from '@navi/brain'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -105,11 +105,29 @@ ipcMain.handle('navi:getPersonalityHistory', () =>
   getDb().select().from(personalityHistory).orderBy(desc(personalityHistory.createdAt)).limit(20).all()
 )
 
-// 大脑（只读，始终从 ~/.claude/settings.json 派生）
+// 大脑（DB 优先 → fallback ~/.claude/settings.json）
 ipcMain.handle('navi:getAllBrain', () => getAllBrain())
 ipcMain.handle('navi:getBrain', (_e, scope: BrainScope) => getBrain(scope))
 ipcMain.handle('navi:getProviderPresets', () => PROVIDER_PRESETS)
 ipcMain.handle('navi:getClaudeConfigStatus', () => getClaudeConfigStatus())
+ipcMain.handle('navi:isBrainCustomized', (_e, scope: BrainScope) => isBrainCustomized(scope))
+ipcMain.handle('navi:getSecretProtectionStatus', () => getSecretProtectionStatus())
+ipcMain.handle('navi:saveBrain', (_e, scope: BrainScope, cfg: BrainProviderConfig) => {
+  saveBrainConfig(scope, cfg)
+  return getBrain(scope)
+})
+ipcMain.handle('navi:clearBrain', (_e, scope: BrainScope) => {
+  clearBrainConfig(scope)
+  return getBrain(scope)
+})
+ipcMain.handle('navi:testBrain', async (_e, cfg: BrainProviderConfig) => {
+  const { testConnection } = await import('@navi/brain')
+  return testConnection({ baseUrl: cfg.baseUrl, apiKey: cfg.apiKey, model: cfg.model, protocol: cfg.protocol })
+})
+ipcMain.handle('navi:fetchBrainModels', async (_e, cfg: BrainProviderConfig) => {
+  const { fetchModels } = await import('@navi/brain')
+  return fetchModels({ baseUrl: cfg.baseUrl, apiKey: cfg.apiKey, protocol: cfg.protocol })
+})
 
 // 时间线
 ipcMain.handle('navi:getTimeline', (_e, date?: string) => {

@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { BrainProviderConfig } from '@navi/brain'
 
 const naviAPI = {
   version: '0.1.0',
@@ -21,11 +22,17 @@ const naviAPI = {
   setPersonalityFreeText: (text: string) => ipcRenderer.invoke('navi:setPersonalityFreeText', text),
   getPersonalityHistory: () => ipcRenderer.invoke('navi:getPersonalityHistory'),
 
-  // 大脑（只读，始终从 ~/.claude/settings.json 派生）
+  // 大脑（DB 优先 → fallback ~/.claude/settings.json）
   getAllBrain: () => ipcRenderer.invoke('navi:getAllBrain'),
   getBrain: (scope: string) => ipcRenderer.invoke('navi:getBrain', scope),
   getProviderPresets: () => ipcRenderer.invoke('navi:getProviderPresets'),
   getClaudeConfigStatus: () => ipcRenderer.invoke('navi:getClaudeConfigStatus'),
+  isBrainCustomized: (scope: string) => ipcRenderer.invoke('navi:isBrainCustomized', scope),
+  getSecretProtectionStatus: () => ipcRenderer.invoke('navi:getSecretProtectionStatus'),
+  saveBrain: (scope: string, cfg: BrainProviderConfig) => ipcRenderer.invoke('navi:saveBrain', scope, cfg),
+  clearBrain: (scope: string) => ipcRenderer.invoke('navi:clearBrain', scope),
+  testBrain: (cfg: BrainProviderConfig) => ipcRenderer.invoke('navi:testBrain', cfg),
+  fetchBrainModels: (cfg: BrainProviderConfig) => ipcRenderer.invoke('navi:fetchBrainModels', cfg),
 
   // 时间线
   getTimeline: (date?: string) => ipcRenderer.invoke('navi:getTimeline', date),

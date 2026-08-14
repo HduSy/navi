@@ -9,6 +9,9 @@
 
 export type BrainScope = 'analysis' | 'dialogue' | 'action'
 
+/** 显式协议。缺省时按 baseUrl 含 /anthropic 自动判定（保持向后兼容） */
+export type WireProtocol = 'anthropic' | 'openai'
+
 export interface BrainProviderConfig {
   scope: BrainScope
   provider: string
@@ -16,6 +19,8 @@ export interface BrainProviderConfig {
   baseUrl: string
   apiKey: string
   temperature: number
+  /** 显式协议（可选）。缺省时按 baseUrl 含 /anthropic 判定 */
+  protocol?: WireProtocol
 }
 
 export interface ChatMessage {
@@ -35,36 +40,81 @@ export interface ProviderPreset {
   baseUrl: string
   defaultModel: string
   models: string[]
+  protocol: WireProtocol
   docsUrl?: string
 }
 
 export const PROVIDER_PRESETS: ProviderPreset[] = [
   {
     id: 'anthropic',
-    label: 'Anthropic 兼容',
-    baseUrl: '',
-    defaultModel: '',
-    models: [],
+    label: 'Anthropic',
+    baseUrl: 'https://api.anthropic.com/v1',
+    defaultModel: 'claude-sonnet-4-5',
+    models: ['claude-opus-4-1', 'claude-sonnet-4-5', 'claude-haiku-4-5'],
+    protocol: 'anthropic',
     docsUrl: 'https://docs.anthropic.com'
   },
   {
     id: 'openai',
-    label: 'OpenAI 兼容',
-    baseUrl: '',
-    defaultModel: '',
-    models: [],
+    label: 'OpenAI',
+    baseUrl: 'https://api.openai.com/v1',
+    defaultModel: 'gpt-4o',
+    models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'o1-mini'],
+    protocol: 'openai',
     docsUrl: 'https://platform.openai.com'
+  },
+  {
+    id: 'glm',
+    label: '智谱 GLM',
+    baseUrl: 'https://open.bigmodel.cn/api/anthropic',
+    defaultModel: 'glm-4.6',
+    models: ['glm-4.6', 'glm-4.5', 'glm-4-plus'],
+    protocol: 'anthropic',
+    docsUrl: 'https://open.bigmodel.cn/dev/api'
+  },
+  {
+    id: 'doubao',
+    label: '火山方舟',
+    baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
+    defaultModel: 'doubao-seed-1-6-250615',
+    models: ['doubao-seed-1-6-250615', 'doubao-1-5-pro-32k'],
+    protocol: 'openai',
+    docsUrl: 'https://www.volcengine.com/docs/82379'
+  },
+  {
+    id: 'deepseek',
+    label: 'DeepSeek',
+    baseUrl: 'https://api.deepseek.com/v1',
+    defaultModel: 'deepseek-chat',
+    models: ['deepseek-chat', 'deepseek-reasoner'],
+    protocol: 'openai',
+    docsUrl: 'https://platform.deepseek.com'
+  },
+  {
+    id: 'qwen',
+    label: '通义千问',
+    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    defaultModel: 'qwen-max',
+    models: ['qwen-max', 'qwen-plus', 'qwen-turbo'],
+    protocol: 'openai',
+    docsUrl: 'https://help.aliyun.com/zh/dashscope'
+  },
+  {
+    id: 'openrouter',
+    label: 'OpenRouter',
+    baseUrl: 'https://openrouter.ai/api/v1',
+    defaultModel: 'anthropic/claude-sonnet-4.5',
+    models: ['anthropic/claude-sonnet-4.5', 'openai/gpt-4o', 'google/gemini-pro-1.5'],
+    protocol: 'openai',
+    docsUrl: 'https://openrouter.ai/docs'
   }
 ]
 
 /** 判断是否走 Anthropic Messages API 协议。
- *  规则：baseUrl 含 `/anthropic`（区分大小写）→ anthropic 协议；
- *  否则一律走 OpenAI 兼容 chat completions。
- *  这样能正确处理：
- *   - 真正的 Anthropic / 智谱 anthropic 兼容端点（含 /anthropic）
- *   - 火山 ARK coding、Together、OpenRouter 等不含 /anthropic 的供应商
+ *  优先级：显式 config.protocol > baseUrl 含 `/anthropic` 自动判定。
  */
-function isAnthropicProtocol(config: BrainProviderConfig): boolean {
+function isAnthropicProtocol(config: Pick<BrainProviderConfig, 'baseUrl' | 'protocol'>): boolean {
+  if (config.protocol) return config.protocol === 'anthropic'
   return /\/anthropic(\/|$)/i.test(config.baseUrl)
 }
 
@@ -207,6 +257,141 @@ export async function embed(config: BrainProviderConfig, input: string): Promise
   const data: any = await res.json()
   const vec: number[] = data?.data?.[0]?.embedding ?? []
   return vec
+}
+
+/* ───────────── 连通性测试 + 模型列表拉取 ───────────── */
+
+/** 测试连接错误 code，调用方按 code 映射文案 */
+export type BrainTestErrorCode =
+  | 'AUTH_INVALID'
+  | 'AUTH_FORBIDDEN'
+  | 'RATE_LIMITED'
+  | 'QUOTA_EXCEEDED'
+  | 'MODEL_NOT_FOUND'
+  | 'ENDPOINT_NOT_FOUND'
+  | 'CONTEXT_TOO_LONG'
+  | 'WIRE_INCOMPATIBLE'
+  | 'UPSTREAM_ERROR'
+  | 'UPSTREAM_UNREACHABLE'
+  | 'TIMEOUT'
+  | 'UNKNOWN'
+
+export interface BrainTestError {
+  ok: false
+  code: BrainTestErrorCode
+  message: string
+  status?: number
+}
+
+export interface BrainTestOk {
+  ok: true
+  latencyMs: number
+}
+
+export type BrainTestResult = BrainTestOk | BrainTestError
+
+/** 从 HTTP 状态码 + 错误体分类错误码（覆盖 Anthropic/OpenAI/litellm/OpenRouter 措辞） */
+export function classifyBrainError(status: number, bodyText: string): BrainTestErrorCode {
+  const t = bodyText.toLowerCase()
+  if (status === 401) return 'AUTH_INVALID'
+  if (status === 403) return 'AUTH_FORBIDDEN'
+  if (status === 402) return 'QUOTA_EXCEEDED'
+  if (status === 429 || status === 529) return 'RATE_LIMITED'
+  if (status === 404) return 'ENDPOINT_NOT_FOUND'
+  if (status >= 500) return 'UPSTREAM_ERROR'
+  // 基于 body 的 pattern 匹配
+  if (/model.*(not found|does not exist|not available)/i.test(t)) return 'MODEL_NOT_FOUND'
+  if (/context.*(length|window|too long)/i.test(t)) return 'CONTEXT_TOO_LONG'
+  if (/quota|insufficient|balance|limit/i.test(t)) return 'QUOTA_EXCEEDED'
+  if (/unauthor|invalid.*api.*key|invalid.*token/i.test(t)) return 'AUTH_INVALID'
+  if (/rate.?limit|too many requests/i.test(t)) return 'RATE_LIMITED'
+  if (/not found|unknown.*model/i.test(t)) return 'MODEL_NOT_FOUND'
+  return 'UNKNOWN'
+}
+
+/** 测试连接：发 max_tokens=1 最小探测请求，10s 超时 */
+export async function testConnection(
+  config: Pick<BrainProviderConfig, 'baseUrl' | 'apiKey' | 'model' | 'protocol'>
+): Promise<BrainTestResult> {
+  const start = Date.now()
+  try {
+    const isAnthropic = isAnthropicProtocol(config)
+    const url = isAnthropic
+      ? buildApiUrl(config.baseUrl, '/messages')
+      : buildApiUrl(config.baseUrl, '/chat/completions')
+    const body = isAnthropic
+      ? {
+          model: config.model,
+          max_tokens: 1,
+          messages: [{ role: 'user', content: 'ping' }],
+          thinking: { type: 'disabled' as const }
+        }
+      : {
+          model: config.model,
+          messages: [{ role: 'user', content: 'ping' }],
+          max_tokens: 1
+        }
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (isAnthropic) {
+      headers['x-api-key'] = config.apiKey
+      headers['anthropic-version'] = '2023-06-01'
+    } else {
+      headers['Authorization'] = `Bearer ${config.apiKey}`
+      headers['api-key'] = config.apiKey
+    }
+    const res = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(10_000)
+    })
+    const latencyMs = Date.now() - start
+    if (res.ok) return { ok: true, latencyMs }
+    const text = await res.text().catch(() => '')
+    return {
+      ok: false,
+      code: classifyBrainError(res.status, text),
+      message: `HTTP ${res.status}: ${text.slice(0, 300)}`,
+      status: res.status
+    }
+  } catch (e: unknown) {
+    if (e instanceof Error) {
+      if (/abort|timeout/i.test(e.name) || /timed?\s*out/i.test(e.message)) {
+        return { ok: false, code: 'TIMEOUT', message: '请求超时（>10s）' }
+      }
+      return { ok: false, code: 'UPSTREAM_UNREACHABLE', message: e.message }
+    }
+    return { ok: false, code: 'UNKNOWN', message: String(e) }
+  }
+}
+
+/** 拉取供应商模型列表：GET /v1/models */
+export async function fetchModels(
+  config: Pick<BrainProviderConfig, 'baseUrl' | 'apiKey' | 'protocol'>
+): Promise<string[]> {
+  const url = buildApiUrl(config.baseUrl, '/models')
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (isAnthropicProtocol(config)) {
+    headers['x-api-key'] = config.apiKey
+    headers['anthropic-version'] = '2023-06-01'
+  } else {
+    headers['Authorization'] = `Bearer ${config.apiKey}`
+    headers['api-key'] = config.apiKey
+  }
+  const res = await fetch(url, {
+    method: 'GET',
+    headers,
+    signal: AbortSignal.timeout(10_000)
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`HTTP ${res.status}: ${text.slice(0, 300)}`)
+  }
+  const data: any = await res.json()
+  const list: Array<{ id?: string; name?: string }> = data?.data ?? data?.models ?? []
+  return list
+    .map((m) => m.id ?? m.name ?? '')
+    .filter((id) => Boolean(id))
 }
 
 export function defaultBrainConfig(): Record<BrainScope, BrainProviderConfig> {

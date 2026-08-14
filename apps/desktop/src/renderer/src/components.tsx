@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react'
+import { useState, useEffect, useRef, useCallback, useLayoutEffect, useMemo } from 'react'
 
 /** 把 epoch ms 转本地日期 YYYY-MM-DD 字符串（renderer 端便捷方法） */
 export function toLocalDateStr(ms: number): string {
@@ -569,6 +569,168 @@ export function FitText({
       }}
     >
       {children}
+    </div>
+  )
+}
+
+/**
+ * Select —— 通用下拉选择器（自实现，适配 Navi 样式风格）
+ *
+ * 功能：
+ *  - 点击触发按钮展开选项面板
+ *  - 支持可编辑模式（editable）：允许手动输入自定义值，同时从 options 里筛选
+ *  - 支持只读模式：只能从 options 里选
+ *  - 点击外部自动收起，Esc 收起，Enter 选中高亮项
+ *  - 键盘上下键导航选项
+ */
+export function Select({
+  value,
+  onChange,
+  options,
+  placeholder = '请选择',
+  editable = false,
+  emptyText = '无选项'
+}: {
+  value: string
+  onChange: (v: string) => void
+  options: string[]
+  placeholder?: string
+  editable?: boolean
+  emptyText?: string
+}) {
+  const [open, setOpen] = useState(false)
+  const [input, setInput] = useState(value)
+  const [highlight, setHighlight] = useState(-1)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
+
+  // 外部 value 变化时同步 input
+  useEffect(() => {
+    setInput(value)
+  }, [value])
+
+  // 点击外部收起
+  useEffect(() => {
+    if (!open) return
+    function onDocClick(e: MouseEvent) {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
+        setOpen(false)
+        setHighlight(-1)
+      }
+    }
+    document.addEventListener('mousedown', onDocClick)
+    return () => document.removeEventListener('mousedown', onDocClick)
+  }, [open])
+
+  // 筛选后的选项
+  const filtered = useMemo(() => {
+    if (!editable || !input || input === value) return options
+    const q = input.toLowerCase()
+    return options.filter((o) => o.toLowerCase().includes(q))
+  }, [options, editable, input, value])
+
+  function commit(v: string) {
+    onChange(v)
+    setInput(v)
+    setOpen(false)
+    setHighlight(-1)
+  }
+
+  function onKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Escape') {
+      setOpen(false)
+      setHighlight(-1)
+      return
+    }
+    if (!open && (e.key === 'ArrowDown' || e.key === 'Enter')) {
+      e.preventDefault()
+      setOpen(true)
+      setHighlight(filtered.findIndex((o) => o === value))
+      return
+    }
+    if (!open) return
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setHighlight((h) => Math.min(h + 1, filtered.length - 1))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setHighlight((h) => Math.max(h - 1, 0))
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      const idx = highlight >= 0 ? highlight : filtered.findIndex((o) => o === input)
+      if (idx >= 0 && idx < filtered.length) commit(filtered[idx]!)
+      else if (editable && input) commit(input)
+    }
+  }
+
+  // 滚动到高亮项
+  useEffect(() => {
+    if (!open || highlight < 0) return
+    const el = listRef.current?.querySelector(`[data-idx="${highlight}"]`)
+    el?.scrollIntoView({ block: 'nearest' })
+  }, [highlight, open])
+
+  const triggerCls =
+    'w-full bg-cream-200 border border-stone-300 rounded px-3 py-1.5 text-sm text-stone-700 placeholder-stone-400 focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent-soft transition-colors duration-150 text-left'
+
+  return (
+    <div ref={rootRef} className="relative">
+      {editable ? (
+        <input
+          type="text"
+          value={input}
+          onChange={(e) => {
+            setInput(e.target.value)
+            if (!open) setOpen(true)
+            // 立即透传输入（允许自定义值实时生效）
+            onChange(e.target.value)
+          }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={onKeyDown}
+          placeholder={placeholder}
+          className={triggerCls + ' pr-8'}
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          onKeyDown={onKeyDown}
+          className={triggerCls + ' flex items-center justify-between' + (value ? '' : ' text-stone-400')}
+        >
+          <span className="truncate">{value || placeholder}</span>
+          <span className={'mono text-[10px] text-stone-400 transition-transform ' + (open ? 'rotate-180' : '')}>▼</span>
+        </button>
+      )}
+
+      {open && (
+        <div
+          ref={listRef}
+          className="absolute z-50 mt-1 left-0 right-0 max-h-[220px] overflow-auto bg-cream-50 border border-stone-300 rounded shadow-sm"
+        >
+          {filtered.length === 0 ? (
+            <div className="px-3 py-2 text-xs text-stone-400">{emptyText}</div>
+          ) : (
+            filtered.map((o, i) => (
+              <div
+                key={o}
+                data-idx={i}
+                onMouseEnter={() => setHighlight(i)}
+                onClick={() => commit(o)}
+                className={
+                  'px-3 py-1.5 text-sm cursor-pointer transition-colors ' +
+                  (o === value
+                    ? 'bg-accent-soft text-accent'
+                    : i === highlight
+                      ? 'bg-cream-200 text-stone-700'
+                      : 'text-stone-600 hover:bg-cream-200')
+                }
+              >
+                {o}
+              </div>
+            ))
+          )}
+        </div>
+      )}
     </div>
   )
 }

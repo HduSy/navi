@@ -66,6 +66,8 @@ export interface PersonalityHistoryRow {
   createdAt: number
 }
 
+export type WireProtocol = 'anthropic' | 'openai'
+
 export interface BrainProviderConfig {
   scope: string
   provider: string
@@ -73,6 +75,7 @@ export interface BrainProviderConfig {
   baseUrl: string
   apiKey: string
   temperature: number
+  protocol?: WireProtocol
 }
 
 export interface ProviderPreset {
@@ -81,8 +84,19 @@ export interface ProviderPreset {
   baseUrl: string
   defaultModel: string
   models: string[]
+  protocol: WireProtocol
   docsUrl?: string
 }
+
+/** 连通性测试结果 */
+export type BrainTestErrorCode =
+  | 'AUTH_INVALID' | 'AUTH_FORBIDDEN' | 'RATE_LIMITED' | 'QUOTA_EXCEEDED'
+  | 'MODEL_NOT_FOUND' | 'ENDPOINT_NOT_FOUND' | 'CONTEXT_TOO_LONG' | 'WIRE_INCOMPATIBLE'
+  | 'UPSTREAM_ERROR' | 'UPSTREAM_UNREACHABLE' | 'TIMEOUT' | 'UNKNOWN'
+
+export type BrainTestResult =
+  | { ok: true; latencyMs: number }
+  | { ok: false; code: BrainTestErrorCode; message: string; status?: number }
 
 export interface TimelineEntryRow {
   hourStart: number
@@ -207,6 +221,12 @@ export interface NaviAPI {
   getBrain: (scope: string) => Promise<BrainProviderConfig>
   getProviderPresets: () => Promise<ProviderPreset[]>
   getClaudeConfigStatus: () => Promise<{ available: boolean; baseUrl: string; model: string; hasToken: boolean }>
+  isBrainCustomized: (scope: string) => Promise<boolean>
+  getSecretProtectionStatus: () => Promise<boolean>
+  saveBrain: (scope: string, cfg: BrainProviderConfig) => Promise<BrainProviderConfig>
+  clearBrain: (scope: string) => Promise<BrainProviderConfig>
+  testBrain: (cfg: BrainProviderConfig) => Promise<BrainTestResult>
+  fetchBrainModels: (cfg: BrainProviderConfig) => Promise<string[]>
   getTimeline: (date?: string) => Promise<TimelineEntryRow[] | { entries: TimelineEntryRow[]; hasSessions: boolean }>
   generateTimeline: (hourStartMs: number) => Promise<{ ok: boolean; reason?: string }>
   generateTimelineForDay: (date: string) => Promise<{ generated: number[]; skipped: number[] }>
