@@ -1,5 +1,5 @@
 import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { Chat } from './pages/Chat'
 import { Timeline } from './pages/Timeline'
 import { Diary } from './pages/Diary'
@@ -11,6 +11,7 @@ import { Relations } from './pages/Relations'
 import { Brain } from './pages/Brain'
 import { DragRegion, NoDrag, setAccent, formatClock } from './components'
 import type { AccentPage } from './components'
+import { getChatPhase, subscribeChatPhase } from './face-state'
 import {
   IconChat,
   IconTimeline,
@@ -44,7 +45,7 @@ const NAV_SECTIONS: Array<{ label: string; items: NavEntry[] }> = [
     label: '认知',
     items: [
       { to: '/projects', label: '项目', tip: '从 Claude Code 会话里识别出的代码库', Icon: IconProjects, accent: 'projects' },
-      { to: '/wiki', label: '记忆', tip: 'LLM 维护的 markdown 知识图谱 · 可读可编辑', Icon: IconWiki, accent: 'wiki' },
+      { to: '/wiki', label: '经验', tip: '踩过的坑都是经验 · Navi 从会话里自动提炼，可读可编辑', Icon: IconWiki, accent: 'wiki' },
       { to: '/personality', label: '人格', tip: 'Navi 的脾气 · 直接拖动调整，失焦自动保存', Icon: IconPersonality, accent: 'personality' },
       { to: '/skills', label: '技能', tip: '从你的会话里抽出的扩展能力', Icon: IconSkills, accent: 'skills' },
       { to: '/relations', label: '关系', tip: '从会话里识别出的人', Icon: IconRelations, accent: 'relations' }
@@ -76,15 +77,43 @@ function Clock(): React.ReactElement {
   return <span>{now}</span>
 }
 
-/** Navi 颜文字表情：默认就绪，偶尔眨眼/张望，给 header 一点生命感 */
-const FACES = {
-  ready: { face: '(・ω・)', label: '在听' },
-  blink: { face: '(・▽・)', label: '在听' },
-  look:  { face: '(´・ω・)', label: '张望' },
-  idle:  { face: '(´-ω-)', label: '发呆' }
-} as const
+/** 各页面的表情帧序列（微表情：靠字符切换，不靠整体位移）。
+ *  帧里重复首帧制造停顿感，interval 控制节奏。
+ */
+const PAGE_FACES: Record<string, { frames: string[]; label: string; interval: number }> = {
+  '/':            { frames: ['(・ω・)', '(・ω・)', '(・ー・)', '(・ω・)'], label: '在听', interval: 600 },
+  '/timeline':    { frames: ['(◔ω◔)', '(◔ω◔)', '(◡ω◡)', '(◔ω◔)'], label: '记着呢', interval: 650 },
+  '/diary':       { frames: ['(˘ω˘)', '(˘ω˘)', '(-ω-)', '(˘ω˘)'], label: '酝酿日记', interval: 700 },
+  '/projects':    { frames: ['(◎_◎)', '(◉_◉)', '(◎_◎)', '(⊙_⊙)', '(◎_◎)'], label: '盘项目', interval: 420 },
+  '/wiki':        { frames: ['(▼ω▼)', '(▼ω▼)', '(▽ω▽)', '(▼ω▼)'], label: '翻记忆', interval: 650 },
+  '/personality': { frames: ['(￣ω￣)', '(￣ω￣)', '(￣∀￣)', '(￣ω￣)'], label: '端详自己', interval: 750 },
+  '/skills':      { frames: ['(・∀・)', '(・∀・)', '(ー∀ー)', '(・∀・)'], label: '清点技能', interval: 550 },
+  '/relations':   { frames: ['(＾▽＾)', '(＾▽＾)', '(´▽｀)', '(＾▽＾)'], label: '数人头', interval: 600 },
+  '/brain':       { frames: ['(◔_◔)', '(◔_◔)', '(◔‿◔)', '(◔_◔)'], label: '换脑子', interval: 500 }
+}
 
-type FaceKey = keyof typeof FACES
+const THINKING_FRAMES = ['(๑•̀ㅂ•́)و', '(๑•́ㅂ•̀)و']
+const IDLE_FRAMES = ['(´-ω-)', '(´-ω-)', '(-ω-)', '(´-ω-)']
+
+/** 帧动画 hook：循环播放字符帧 */
+function useFaceFrames(frames: string[], interval: number): string {
+  const [i, setI] = useState(0)
+  useEffect(() => {
+    setI(0)
+    const id = setInterval(() => setI((v) => (v + 1) % frames.length), interval)
+    return () => clearInterval(id)
+  }, [frames, interval])
+  return frames[Math.min(i, frames.length - 1)]!
+}
+
+/** 路由前缀匹配页面表情（'/' 需精确匹配） */
+function faceForPath(pathname: string): { frames: string[]; label: string; interval: number } {
+  if (pathname !== '/') {
+    const hit = Object.keys(PAGE_FACES).find((p) => p !== '/' && pathname.startsWith(p))
+    if (hit) return PAGE_FACES[hit]!
+  }
+  return PAGE_FACES['/']!
+}
 
 /** 三点循环动画：用 keyframes 让三个点依次升降，表示「正在…」 */
 function Dots(): React.ReactElement {
@@ -104,30 +133,57 @@ function Dots(): React.ReactElement {
   )
 }
 
+/** Navi 颜文字表情：反映真实状态。
+ *  优先级：聊天回复中（thinking）> 空闲发呆（30s 无操作）> 页面对应表情（偶尔眨眼）。
+ */
 function NaviFace(): React.ReactElement {
-  const [key, setKey] = useState<FaceKey>('ready')
+  const { pathname } = useLocation()
+  const [idle, setIdle] = useState(false)
+  const [chatPhase, setLocalPhase] = useState(getChatPhase())
+  const lastActivityRef = useRef(Date.now())
+
+  // 全局操作监听：只记时间戳到 ref，不触发渲染
+  useEffect(() => {
+    const on = () => {
+      lastActivityRef.current = Date.now()
+    }
+    const evs = ['mousemove', 'mousedown', 'keydown', 'wheel', 'touchstart']
+    evs.forEach((e) => window.addEventListener(e, on, { passive: true }))
+    return () => evs.forEach((e) => window.removeEventListener(e, on))
+  }, [])
+
+  // 每 2s 检查一次：超过 30s 无操作 → 发呆
   useEffect(() => {
     const id = setInterval(() => {
-      const r = Math.random()
-      // 大部分时间就绪，偶尔眨眼/张望/发呆
-      if (r < 0.5) setKey('ready')
-      else if (r < 0.75) setKey('blink')
-      else if (r < 0.92) setKey('look')
-      else setKey('idle')
-    }, 4000)
+      setIdle(Date.now() - lastActivityRef.current > 30_000)
+    }, 2000)
     return () => clearInterval(id)
   }, [])
-  const { face, label } = FACES[key]
+
+  // 订阅 Chat 页上报的阶段（发送消息 → thinking）
+  useEffect(() => subscribeChatPhase(setLocalPhase), [])
+
+  const thinking = chatPhase === 'thinking'
+  const base = faceForPath(pathname)
+  const cfg = thinking
+    ? { frames: THINKING_FRAMES, interval: 280, label: '思考中', dots: true }
+    : idle
+      ? { frames: IDLE_FRAMES, interval: 900, label: '发呆', dots: false }
+      : { frames: base.frames, interval: base.interval, label: base.label, dots: false }
+
+  const face = useFaceFrames(cfg.frames, cfg.interval)
+
   return (
     <span
       className="flex items-center gap-1 text-[12px] text-stone-500 leading-none select-none"
       style={{ fontFamily: '"PingFang SC", -apple-system, system-ui, sans-serif' }}
-      title={`Navi ${label}…`}
+      title={`Navi ${cfg.label}…`}
     >
-      <span className="text-[13px] tabular-nums">{face}</span>
+      {/* min-width 兜底防帧切换时宽度抖动 */}
+      <span className="text-[13px] inline-block text-center" style={{ minWidth: '5.2em' }}>{face}</span>
       <span className="inline-flex items-baseline">
-        {label}
-        <Dots />
+        {cfg.label}
+        {cfg.dots && <Dots />}
       </span>
     </span>
   )

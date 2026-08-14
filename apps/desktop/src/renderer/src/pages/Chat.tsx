@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import type { ChatMessageRow, SessionStats } from '../types'
 import { Button, Label, formatClock, formatTime, basename, NoDrag, DragRegion } from '../components'
+import { setChatPhase } from '../face-state'
 
 interface DisplayMessage extends ChatMessageRow {
   pending?: boolean
@@ -50,6 +51,7 @@ export function Chat() {
     const text = input.trim()
     setInput('')
     setSending(true)
+    setChatPhase('thinking')
     const now = Date.now()
     const tempId = `pending-${now}`
     setMessages((prev) => [
@@ -101,6 +103,7 @@ export function Chat() {
       ])
     } finally {
       setSending(false)
+      setChatPhase('idle')
     }
   }
 

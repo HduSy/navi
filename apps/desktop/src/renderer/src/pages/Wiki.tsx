@@ -1,21 +1,12 @@
-import { useAsync, Button, Empty, Label, Markdown, Tabs, Tag, formatTime, basename, NoDrag } from '../components'
+import { useAsync, Button, Empty, Label, Markdown, Tag, formatTime, basename, NoDrag } from '../components'
 import { useState } from 'react'
 import type { WikiPage } from '../types'
 
-const TYPES: Array<{ id: string; label: string }> = [
-  { id: 'experience', label: '经验' },
-  { id: 'project', label: '项目' },
-  { id: 'person', label: '人物' },
-  { id: 'timeline', label: '时间线' },
-  { id: 'diary', label: '日记' },
-  { id: 'habit', label: '习惯' },
-  { id: 'personality', label: '人格' },
-  { id: 'skill', label: '技能' }
-]
+/** 经验页只展示 experience 类型（其他类型在导航里有独立页面） */
+const TYPE = 'experience'
 
 export function Wiki() {
-  const [type, setType] = useState('experience')
-  const { data, loading, reload } = useAsync(() => window.navi.listWiki(type), [type])
+  const { data, loading, reload } = useAsync(() => window.navi.listWiki(TYPE), [TYPE])
   const [selected, setSelected] = useState<WikiPage | null>(null)
   const [detailText, setDetailText] = useState('')
   const [editing, setEditing] = useState(false)
@@ -53,15 +44,9 @@ export function Wiki() {
     <div className="h-full flex flex-col">
       {!selected ? (
         <>
-          <div className="shrink-0 flex items-center gap-3 px-7 pt-3 pb-2">
-            <div className="flex-1 overflow-x-auto hide-scrollbar min-w-0">
-              <Tabs
-                tabs={TYPES.map((t) => ({ id: t.id, label: t.label }))}
-                active={type}
-                onChange={(id) => setType(id)}
-              />
-            </div>
-            <NoDrag className="shrink-0">
+          <div className="shrink-0 flex items-center gap-3 px-7 pt-3 pb-2 border-b border-stone-300">
+            <span className="mono text-[11px] text-stone-400">踩过的坑，Navi 都帮你记着</span>
+            <NoDrag className="ml-auto shrink-0">
               <Button variant="outlined" size="sm" onClick={() => window.navi.rebuildIndex().then(() => reload())}>
                 重新整理
               </Button>
@@ -71,7 +56,7 @@ export function Wiki() {
             {loading ? (
               <p className="text-stone-400">加载中...</p>
             ) : pages.length === 0 ? (
-              <Empty text="这一格还空着，Navi 多看看你干活就会填上" />
+              <Empty text="还没踩过什么坑，多干点活，Navi 会把经验记下来" />
             ) : (
               <div
                 className="grid gap-3 w-full"
