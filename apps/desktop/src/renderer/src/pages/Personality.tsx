@@ -1,6 +1,6 @@
-import { useAsync, Label, formatTime, useDebouncedCallback } from '../components'
+import { useAsync, Label, useDebouncedCallback } from '../components'
 import { useState, useEffect } from 'react'
-import type { PersonalityState, PersonalityHistoryRow } from '../types'
+import type { PersonalityState } from '../types'
 
 const DIMS: Array<{ key: keyof PersonalityState['dimensions']; label: string; left: string; right: string }> = [
   { key: 'tone', label: '语气', left: '正经', right: '随意' },
@@ -13,7 +13,6 @@ const DIMS: Array<{ key: keyof PersonalityState['dimensions']; label: string; le
 
 export function Personality() {
   const { data, reload } = useAsync(() => window.navi.getPersonality())
-  const { data: history } = useAsync(() => window.navi.getPersonalityHistory())
   const [dims, setDims] = useState<PersonalityState['dimensions'] | null>(null)
 
   useEffect(() => {
@@ -25,7 +24,7 @@ export function Personality() {
   return (
     <div className="h-full flex flex-col">
       <div className="flex-1 overflow-auto px-7 py-[22px]">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 max-w-6xl">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 w-full">
           {/* 维度 */}
           <section className="border border-stone-300 rounded p-4 bg-cream-200">
             <h3 className="text-[13px] font-semibold text-stone-400 uppercase tracking-[0.04em] mb-3">当前脾气</h3>
@@ -75,18 +74,6 @@ export function Personality() {
             </div>
           </section>
         </div>
-
-        {/* 成长轨迹 */}
-        {history && history.length > 0 && (
-          <section className="mt-5 max-w-6xl">
-            <Label>Navi 的成长轨迹</Label>
-            <div className="mt-3 space-y-1.5">
-              {history.map((h) => (
-                <HistoryItem key={h.id} item={h} />
-              ))}
-            </div>
-          </section>
-        )}
       </div>
     </div>
   )
@@ -162,16 +149,5 @@ function RoleEditor({ initial, onSave }: { initial: string; onSave: (t: string) 
         placeholder="描述 Navi 是个什么样的伙伴，比如：像个懂技术的老友，直来直去，偶尔吐槽但靠谱"
       />
     </>
-  )
-}
-
-function HistoryItem({ item }: { item: PersonalityHistoryRow }) {
-  return (
-    <div className="border border-stone-300 rounded-sm px-3 py-2.5 bg-cream-200 text-[13px] flex items-center justify-between gap-3">
-      <span className="text-stone-600">{item.change}</span>
-      <span className="mono text-[11px] text-stone-400 shrink-0">
-        {item.trigger} · {formatTime(item.createdAt)}
-      </span>
-    </div>
   )
 }

@@ -53,7 +53,7 @@ export function Wiki() {
     <div className="h-full flex flex-col">
       {!selected ? (
         <>
-          <div className="shrink-0 flex items-center gap-3 px-7 pt-4 pb-2">
+          <div className="shrink-0 flex items-center gap-3 px-7 pt-3 pb-2">
             <div className="flex-1 overflow-x-auto hide-scrollbar min-w-0">
               <Tabs
                 tabs={TYPES.map((t) => ({ id: t.id, label: t.label }))}
@@ -74,7 +74,7 @@ export function Wiki() {
               <Empty text="这一格还空着，Navi 多看看你干活就会填上" />
             ) : (
               <div
-                className="grid gap-3 max-w-6xl"
+                className="grid gap-3 w-full"
                 style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}
               >
                 {pages.map((p) => (
@@ -158,7 +158,7 @@ function Detail({
 }) {
   return (
     <>
-      <div className="shrink-0 bg-cream-50 border-b border-stone-300 px-7 py-3 flex items-center justify-between">
+      <div className="shrink-0 bg-cream-50 border-b border-stone-300 px-7 pt-3 pb-2 flex items-center justify-between">
         <div className="flex items-center gap-3 min-w-0">
           <NoDrag className="shrink-0">
             <Button variant="outlined" size="sm" onClick={onBack}>← 返回</Button>

@@ -7,7 +7,7 @@ type SortBy = 'count' | 'latest'
 export function Skills() {
   const { data, loading } = useAsync(() => window.navi.getSkills())
   const [toggles, setToggles] = useState<Record<string, boolean>>({})
-  const [sortBy, setSortBy] = useState<SortBy>('count')
+  const [sortBy, setSortBy] = useState<SortBy>('latest')
   const [filter, setFilter] = useState<'skill' | 'mcp'>('skill')
 
   // 只展示用过的（callCount > 0 且 lastUsedAt 有值）
@@ -40,55 +40,51 @@ export function Skills() {
     <div className="h-full flex flex-col">
       {!loading && used.length > 0 && (
         <div className="shrink-0 flex items-center gap-2 flex-wrap px-7 pt-[22px] pb-3 border-b border-stone-300">
-          <div className="flex gap-2">
-            <button
-              onClick={() => setFilter('skill')}
-              className={
-                'text-xs font-medium py-1.5 px-3 rounded-sm border transition-colors ' +
-                (filter === 'skill'
-                  ? 'bg-accent-soft text-accent border-accent-line'
-                  : 'bg-cream-200 text-stone-500 border-stone-300 hover:bg-cream-50 hover:text-stone-600')
-              }
-            >
-              SKILL
-            </button>
-            <button
-              onClick={() => setFilter('mcp')}
-              className={
-                'text-xs font-medium py-1.5 px-3 rounded-sm border transition-colors ' +
-                (filter === 'mcp'
-                  ? 'bg-accent-soft text-accent border-accent-line'
-                  : 'bg-cream-200 text-stone-500 border-stone-300 hover:bg-cream-50 hover:text-stone-600')
-              }
-            >
-              MCP
-            </button>
-          </div>
-          <div className="ml-auto flex items-center gap-2">
-            <span className="mono text-[11px] text-stone-400">排序</span>
-            <button
-              onClick={() => setSortBy('count')}
-              className={
-                'text-xs font-medium py-1.5 px-3 rounded-sm border transition-colors ' +
-                (sortBy === 'count'
-                  ? 'bg-accent-soft text-accent border-accent-line'
-                  : 'bg-cream-200 text-stone-500 border-stone-300 hover:bg-cream-50 hover:text-stone-600')
-              }
-            >
-              按次数
-            </button>
-            <button
-              onClick={() => setSortBy('latest')}
-              className={
-                'text-xs font-medium py-1.5 px-3 rounded-sm border transition-colors ' +
-                (sortBy === 'latest'
-                  ? 'bg-accent-soft text-accent border-accent-line'
-                  : 'bg-cream-200 text-stone-500 border-stone-300 hover:bg-cream-50 hover:text-stone-600')
-              }
-            >
-              按最近
-            </button>
-          </div>
+          <button
+            onClick={() => setSortBy('latest')}
+            className={
+              'text-xs font-medium py-1.5 px-3 rounded-sm border transition-colors ' +
+              (sortBy === 'latest'
+                ? 'bg-accent-soft text-accent border-accent-line'
+                : 'bg-cream-200 text-stone-500 border-stone-300 hover:bg-cream-50 hover:text-stone-600')
+            }
+          >
+            按最近
+          </button>
+          <button
+            onClick={() => setSortBy('count')}
+            className={
+              'text-xs font-medium py-1.5 px-3 rounded-sm border transition-colors ' +
+              (sortBy === 'count'
+                ? 'bg-accent-soft text-accent border-accent-line'
+                : 'bg-cream-200 text-stone-500 border-stone-300 hover:bg-cream-50 hover:text-stone-600')
+            }
+          >
+            按次数
+          </button>
+          <span className="w-px h-4 bg-stone-300" aria-hidden />
+          <button
+            onClick={() => setFilter('skill')}
+            className={
+              'text-xs font-medium py-1.5 px-3 rounded-sm border transition-colors ' +
+              (filter === 'skill'
+                ? 'bg-accent-soft text-accent border-accent-line'
+                : 'bg-cream-200 text-stone-500 border-stone-300 hover:bg-cream-50 hover:text-stone-600')
+            }
+          >
+            SKILL
+          </button>
+          <button
+            onClick={() => setFilter('mcp')}
+            className={
+              'text-xs font-medium py-1.5 px-3 rounded-sm border transition-colors ' +
+              (filter === 'mcp'
+                ? 'bg-accent-soft text-accent border-accent-line'
+                : 'bg-cream-200 text-stone-500 border-stone-300 hover:bg-cream-50 hover:text-stone-600')
+            }
+          >
+            MCP
+          </button>
         </div>
       )}
       <div className="flex-1 overflow-auto px-7 py-[22px]">
@@ -97,7 +93,7 @@ export function Skills() {
         ) : used.length === 0 ? (
           <Empty text="还没用过任何扩展，去 ClaudeCode 里调几个 skill 或 MCP 吧" />
         ) : (
-          <div className="space-y-5 max-w-6xl">
+          <div className="space-y-5 w-full">
 
             {filter === 'skill' && skills.length > 0 && (
               <CardGrid items={skills} effectiveEnabled={effectiveEnabled} onToggle={toggle} />

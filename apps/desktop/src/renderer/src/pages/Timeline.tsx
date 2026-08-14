@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { useAsync, Empty, Tag, Pill, NoDrag, formatTime, basename, formatHourLocal, toLocalDateStr } from '../components'
+import { useAsync, Empty, NoDrag, formatTime, formatHourLocal, toLocalDateStr } from '../components'
 import type { TimelineEntryRow } from '../types'
 
 export function Timeline() {
@@ -79,9 +79,8 @@ export function Timeline() {
 
   return (
     <div className="h-full flex flex-col">
-      <NoDrag className="shrink-0 flex items-center gap-2 px-7 py-3.5 border-b border-stone-300">
-        <Pill>整点自动封存</Pill>
-        <div className="ml-auto flex items-center gap-2">
+      <NoDrag className="shrink-0 flex items-center gap-2 px-7 pt-3 pb-2 border-b border-stone-300">
+        <div className="flex items-center gap-2">
           <button
             onClick={() => shift(-1)}
             className="w-[30px] h-[30px] grid place-items-center rounded-sm border border-stone-300 bg-cream-200 text-stone-500 hover:bg-cream-50 hover:text-stone-600 transition-colors"
@@ -139,22 +138,9 @@ type TimelineItem =
   | { kind: 'entry'; entry: TimelineEntryRow; hourStart: number }
   | { kind: 'pending'; hourStart: number }
 
-/** entry 气泡内容：summary + 项目 tags + 记录时间 */
+/** entry 气泡内容：仅 summary（记下时间由 TimelineRow 渲染到卡片右下角） */
 function EntryBody({ entry }: { entry: TimelineEntryRow }) {
-  const projects = safeParseArray(entry.projectPaths)
-  return (
-    <>
-      <p className="text-[13.5px] leading-[1.6] text-stone-600">{entry.summary}</p>
-      {projects.length > 0 && (
-        <div className="mt-2.5 flex flex-wrap gap-1.5">
-          {projects.map((p) => (
-            <Tag key={p}>{basename(p)}</Tag>
-          ))}
-        </div>
-      )}
-      <div className="mt-2.5 mono text-[11px] text-stone-400">Navi 于 {formatTime(entry.generatedAt)} 记下</div>
-    </>
-  )
+  return <p className="text-[13.5px] leading-[1.6] text-stone-600">{entry.summary}</p>
 }
 
 function TimelineRow({ item, isLast, nowHourStart, showAsDayEnd }: { item: TimelineItem; isLast: boolean; nowHourStart: number; showAsDayEnd?: boolean }) {
@@ -167,7 +153,6 @@ function TimelineRow({ item, isLast, nowHourStart, showAsDayEnd }: { item: Timel
   // - 当前小时 entry：收集中，空心
   // - pending 占位（下一整点）：收集中，空心
   let dotStyle: React.CSSProperties
-  let badge: React.ReactNode
   let body: React.ReactNode
   let cardCls: string
 
@@ -175,18 +160,15 @@ function TimelineRow({ item, isLast, nowHourStart, showAsDayEnd }: { item: Timel
     const done = item.entry.finalized === 1 || isPast
     if (done) {
       dotStyle = { background: 'var(--accent)', borderColor: 'var(--accent)' }
-      badge = item.entry.finalized === 1 ? <Tag variant="ok">已封存</Tag> : <Pill>已记录</Pill>
     } else {
       // 当前小时：收集中
       dotStyle = { background: 'transparent', borderColor: 'var(--accent)' }
-      badge = <Pill>收集中 · 整点生成</Pill>
     }
     body = <EntryBody entry={item.entry} />
     cardCls = 'border-stone-300 bg-cream-200 card-hover'
   } else {
     // pending 占位：下一整点收集中
     dotStyle = { background: 'transparent', borderColor: 'var(--accent)' }
-    badge = <Pill>收集中 · 整点生成</Pill>
     body = <p className="text-[13.5px] leading-[1.6] text-stone-400 italic">Navi 正在观察这一小时，整点会生成总结</p>
     cardCls = 'border-stone-300 border-dashed bg-cream-50'
   }
@@ -213,20 +195,15 @@ function TimelineRow({ item, isLast, nowHourStart, showAsDayEnd }: { item: Timel
         />
       </div>
       <div className={'border rounded px-3.5 py-3 transition-colors ' + cardCls}>
-        <div className="flex items-center gap-2 mb-1.5">{badge}</div>
         {body}
+        {item.kind === 'entry' && (
+          <div className="mt-2 mono text-[11px] text-stone-400 text-right">
+            Navi 于 {formatTime(item.entry.generatedAt)} 记下
+          </div>
+        )}
       </div>
     </li>
   )
-}
-
-function safeParseArray(s: string): string[] {
-  try {
-    const a = JSON.parse(s)
-    return Array.isArray(a) ? a : []
-  } catch {
-    return []
-  }
 }
 
 /** YYYY-MM-DD -> M月D日（周X） */

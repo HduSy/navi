@@ -24,7 +24,7 @@ export function Diary() {
         ) : (
           <>
             <nav className="border-r border-stone-300 bg-cream-50 flex flex-col min-h-0">
-              <div className="shrink-0 px-3 pt-3 pb-2 border-b border-stone-300">
+              <div className="shrink-0 flex items-center px-3 py-2.5 border-b border-stone-300">
                 <Button
                   variant="outlined"
                   size="sm"

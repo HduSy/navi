@@ -12,6 +12,14 @@ export function Relations() {
 
   const sel = ps.find((p) => p.id === selected)
 
+  // 进入页面时默认选中 mentionCount 最多的节点
+  useEffect(() => {
+    if (ps.length > 0 && !selected) {
+      const top = ps.reduce((a, b) => (b.mentionCount > a.mentionCount ? b : a))
+      setSelected(top.id)
+    }
+  }, [ps, selected])
+
   return (
     <div className="h-full flex flex-col">
       <div className="flex-1 flex overflow-hidden relative">

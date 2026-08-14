@@ -1,4 +1,28 @@
-import { useAsync, Empty, Label, FitText, formatTime, looksLikeUUID } from '../components'
+import { useAsync, Empty, Label, FitText, formatTime, looksLikeUUID, NoDrag } from '../components'
+import { useState, useMemo } from 'react'
+import type { ProjectRow } from '../types'
+
+type SortKey = 'count' | 'duration' | 'latest'
+
+const SORTS: Array<{ key: SortKey; label: string }> = [
+  { key: 'latest', label: '按最近' },
+  { key: 'count', label: '按次数' },
+  { key: 'duration', label: '按耗时' }
+]
+
+function sortProjects(items: ProjectRow[], key: SortKey): ProjectRow[] {
+  const cmp = (a: ProjectRow, b: ProjectRow): number => {
+    switch (key) {
+      case 'count':
+        return b.sessionCount - a.sessionCount
+      case 'duration':
+        return b.totalDurationMs - a.totalDurationMs
+      case 'latest':
+        return (b.lastActiveAt ?? 0) - (a.lastActiveAt ?? 0)
+    }
+  }
+  return [...items].sort(cmp)
+}
 
 /** 把毫秒按量级换算成紧凑展示（无空格） */
 function formatDuration(ms: number): string {
@@ -18,9 +42,31 @@ function formatDuration(ms: number): string {
 
 export function Projects() {
   const { data, loading } = useAsync(() => window.navi.getProjects())
-  const items = (data ?? []).filter((p) => !looksLikeUUID(p.name))
+  const [sortBy, setSortBy] = useState<SortKey>('latest')
+  const allItems = useMemo(() => (data ?? []).filter((p) => !looksLikeUUID(p.name)), [data])
+  const items = useMemo(() => sortProjects(allItems, sortBy), [allItems, sortBy])
+
   return (
     <div className="h-full flex flex-col">
+      {!loading && allItems.length > 0 && (
+        <NoDrag className="shrink-0 flex items-center gap-2 px-7 pt-3 pb-2 border-b border-stone-300">
+          <span className="mono text-[11px] text-stone-400 mr-1">排序</span>
+          {SORTS.map((s) => (
+            <button
+              key={s.key}
+              onClick={() => setSortBy(s.key)}
+              className={
+                'text-xs font-medium py-1.5 px-3 rounded-sm border transition-colors ' +
+                (sortBy === s.key
+                  ? 'bg-accent-soft text-accent border-accent-line'
+                  : 'bg-cream-200 text-stone-500 border-stone-300 hover:bg-cream-50 hover:text-stone-600')
+              }
+            >
+              {s.label}
+            </button>
+          ))}
+        </NoDrag>
+      )}
       <div className="flex-1 overflow-auto px-7 py-[22px]">
         {loading ? (
           <p className="text-stone-400">加载中...</p>
