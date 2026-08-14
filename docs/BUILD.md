@@ -95,6 +95,10 @@ push 后 `release.yml` 自动构建并创建 GitHub Release，附上 `Navi-<ver>
 `Navi-<ver>-arm64-mac.zip` 及 blockmap。产物**未签名**（见常见问题 #1），
 下载安装需手动绕过 Gatekeeper。
 
+> ⚠️ electron-builder 创建的 Release 是**草稿（draft）**，不会自动公开。
+> 发布到 Release 页面点一下「Publish release」，或命令行：
+> `gh release edit v0.1.0 --draft=false`
+
 ### 发版 workflow 干了什么
 
 1. `macos-latest`（arm64 runner，Apple Silicon）——与本机架构一致，原生编译
