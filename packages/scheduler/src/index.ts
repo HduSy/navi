@@ -10,7 +10,7 @@
  * 通过 TaskFns 接口注入——这样 scheduler 包不依赖 drizzle 实例 / brain / wiki。
  */
 
-import { toLocalDateStr, fromLocalDateStr, toLocalHourStart } from '@navi/core'
+import { toLocalDateStr, fromLocalDateStr, toLocalHourStart, toLocalDayStart } from '@navi/core'
 
 export const SCHEDULER_VERSION = '0.1.0'
 
@@ -117,7 +117,10 @@ export class Scheduler {
     const todayMs = fromLocalDateStr(todayStr)
 
     // 时间线：补全今天所有有 session 的小时
-    await this.backfillTodayTimeline(todayMs)
+    await this.backfillDayTimeline(todayMs)
+    // 补扫近 7 天历史日：昨天（及更早）的最后一个小时（如 23 点档）在当天属于
+    // 「当前小时」不生成，跨天后若没有跨 0 点的 session，就再也没有生成机会
+    await this.backfillRecentDaysTimeline(7)
 
     // 21:00 后：生成当天日记
     if (now.getHours() >= this.opts.diaryMinHour && todayMs) {
@@ -152,9 +155,9 @@ export class Scheduler {
     }
   }
 
-  /** 补全当天所有「已结束小时」的 timeline（跳过当前小时与已存在 hour）
+  /** 补全某天所有「已结束小时」的 timeline（跳过当前小时与已存在 hour）
    *  整点封存语义：当前小时还在进行中，不生成草稿；要等到下一整点之后才会被补 */
-  private async backfillTodayTimeline(dayStartMs: number): Promise<void> {
+  private async backfillDayTimeline(dayStartMs: number): Promise<void> {
     if (!dayStartMs || Number.isNaN(dayStartMs)) return
     const dayEndMs = dayStartMs + 86_400_000 - 1
     const daySessions = this.deps.listSessionsInDay(dayStartMs, dayEndMs)
@@ -185,6 +188,15 @@ export class Scheduler {
     await Promise.all(
       sortedHours.map((h) => this.runTask('timeline', () => this.tasks.generateTimelineForHour(h)))
     )
+  }
+
+  /** 补扫近 N 天历史日的缺失小时（不含今天，今天由 backfillDayTimeline 处理）。
+   *  已存在的小时会被跳过、无内容的小时在任务内部短路，所以每轮全量扫描代价很小 */
+  private async backfillRecentDaysTimeline(recentDays: number): Promise<void> {
+    const todayMs = toLocalDayStart(Date.now())
+    for (let i = 1; i <= recentDays; i++) {
+      await this.backfillDayTimeline(toLocalDayStart(todayMs - i * 86_400_000))
+    }
   }
 
   /** 对近期新入库的 session 抽取经验和人物 */
