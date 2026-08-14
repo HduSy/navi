@@ -227,7 +227,7 @@ export interface NaviAPI {
   clearBrain: (scope: string) => Promise<BrainProviderConfig>
   testBrain: (cfg: BrainProviderConfig) => Promise<BrainTestResult>
   fetchBrainModels: (cfg: BrainProviderConfig) => Promise<string[]>
-  getTimeline: (date?: string) => Promise<TimelineEntryRow[] | { entries: TimelineEntryRow[]; hasSessions: boolean }>
+  getTimeline: (date?: string) => Promise<TimelineEntryRow[] | { entries: TimelineEntryRow[]; hasSessions: boolean; analyzingHours?: number[] }>
   generateTimeline: (hourStartMs: number) => Promise<{ ok: boolean; reason?: string }>
   generateTimelineForDay: (date: string) => Promise<{ generated: number[]; skipped: number[] }>
   regenerateAllTimeline: () => Promise<{ days: number; generated: number; skipped: number }>

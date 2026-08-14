@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 import fs from 'node:fs'
 import { getDb } from './db.js'
 import { getWiki } from './wiki-host.js'
-import { ingestAllSessions, getSessionStats, generateTimelineForHour, generateTimelineForDay, regenerateAllTimeline, generateDiary, generateExperiencesForSession, generatePersonsForSession } from './ingest.js'
+import { ingestAllSessions, getSessionStats, generateTimelineForHour, generateTimelineForDay, regenerateAllTimeline, generateDiary, generateExperiencesForSession, generatePersonsForSession, getInFlightTimelineHours } from './ingest.js'
 import { sendMessage, getRecentMessages } from './dialogue.js'
 import { getPersonality, setPersonalityDimensions, setPersonalityFreeText, type PersonalityDimensions } from './personality.js'
 import { getBrain, getAllBrain, getClaudeConfigStatus, saveBrainConfig, clearBrainConfig, isBrainCustomized, getSecretProtectionStatus } from './brain-host.js'
@@ -140,13 +140,15 @@ ipcMain.handle('navi:getTimeline', (_e, date?: string) => {
   if (Number.isNaN(dayStartMs)) return { entries: [], hasSessions: false }
   const dayEndMs = dayStartMs + 86_400_000 - 1
   const dayEntries = rows.filter((t) => t.hourStart >= dayStartMs && t.hourStart <= dayEndMs)
+  // 分析中：该小时内生成任务正在进行（跨天后回看昨天也适用）
+  const analyzingHours = getInFlightTimelineHours().filter((h) => h >= dayStartMs && h <= dayEndMs)
   // 当天是否有 session（用于区分"啥也没干" vs "正在干但还没到整点"）
   const hasSessions = getDb()
     .select({ startedAt: sessions.startedAt, endedAt: sessions.endedAt })
     .from(sessions)
     .all()
     .some((s) => s.startedAt < dayEndMs && s.endedAt >= dayStartMs)
-  return { entries: dayEntries, hasSessions }
+  return { entries: dayEntries, hasSessions, analyzingHours }
 })
 ipcMain.handle('navi:generateTimeline', (_e, hourStartMs: number) => generateTimelineForHour(hourStartMs))
 ipcMain.handle('navi:generateTimelineForDay', (_e, date: string) => generateTimelineForDay(date))

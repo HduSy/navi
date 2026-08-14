@@ -226,6 +226,22 @@ function deriveSkills(): void {
 
 /** hourStartMs 是本地整点对齐的 epoch ms */
 export async function generateTimelineForHour(hourStartMs: number): Promise<{ ok: boolean; reason?: string }> {
+  // 登记「分析中」状态：getTimeline 据此让渲染层显示该小时正在生成
+  inFlightTimelineHours.add(hourStartMs)
+  try {
+    return await runGenerateTimelineForHour(hourStartMs)
+  } finally {
+    inFlightTimelineHours.delete(hourStartMs)
+  }
+}
+
+/** 正在生成时间线的小时集合（hourStart epoch ms） */
+const inFlightTimelineHours = new Set<number>()
+export function getInFlightTimelineHours(): number[] {
+  return [...inFlightTimelineHours]
+}
+
+async function runGenerateTimelineForHour(hourStartMs: number): Promise<{ ok: boolean; reason?: string }> {
   const db = getDb()
   const wiki = getWiki()
   const brain = getBrain('analysis')

@@ -7,20 +7,7 @@ export function Timeline() {
   // today 跟随 now，跨天时自动更新
   const today = useMemo(() => toLocalDateStr(now), [now])
   const [date, setDate] = useState(today)
-  const { data, loading } = useAsync(() => window.navi.getTimeline(date), [date])
-
-  useEffect(() => {
-    // 每 60s 检查一次，跨整点/跨天时刷新时间轴
-    const id = setInterval(() => setNow(Date.now()), 60_000)
-    function onVis(): void {
-      if (document.visibilityState === 'visible') setNow(Date.now())
-    }
-    document.addEventListener('visibilitychange', onVis)
-    return () => {
-      clearInterval(id)
-      document.removeEventListener('visibilitychange', onVis)
-    }
-  }, [])
+  const { data, loading, reload } = useAsync(() => window.navi.getTimeline(date), [date])
 
   const { items, hasSessions } = useMemo(() => {
     const list = Array.isArray(data) ? data : data?.entries ?? []
@@ -60,22 +47,52 @@ export function Timeline() {
 
   // 展示规则：
   // - 真正有 entry 的小时全部列出
-  // - 今天：若当前小时之后还没有任何 entry，追加一个「下一整点」收集中占位
-  // - 历史日：不加占位
+  // - 分析中：该小时的生成任务正在进行（跨天后回看昨天同样生效）
+  // - 今天：若当前小时之后还没有任何 entry，追加一个「下一整点」采集中占位
+  // - 历史日：不加采集中占位
+  const analyzingHours = useMemo(() => {
+    const list = Array.isArray(data) ? [] : data?.analyzingHours ?? []
+    return list.filter((h) => !items.some((e) => e.hourStart === h))
+  }, [data, items])
+
   const timeline = useMemo(() => {
     const entryItems = items.map((entry) => ({ kind: 'entry' as const, entry, hourStart: entry.hourStart }))
-    const out: Array<{ kind: 'entry'; entry: TimelineEntryRow; hourStart: number } | { kind: 'pending'; hourStart: number }> = [...entryItems]
+    const out: Array<{ kind: 'entry'; entry: TimelineEntryRow; hourStart: number } | { kind: 'pending'; hourStart: number } | { kind: 'analyzing'; hourStart: number }> = [...entryItems]
+    // 分析中：小时已结束、LLM 生成任务进行中
+    for (const h of analyzingHours) out.push({ kind: 'analyzing', hourStart: h })
     if (isToday) {
       const nextHour = nowHourStart + 3_600_000
       const hasFuture = items.some((e) => e.hourStart >= nextHour)
-      // 当前小时还没有 entry，且后续也没有任何 entry：补一个下一整点的收集中占位
+      // 当前小时还没有 entry，且后续也没有任何 entry：补一个下一整点的采集中占位
       if (!items.some((e) => e.hourStart === nowHourStart) && !hasFuture) {
         out.push({ kind: 'pending', hourStart: nextHour })
       }
     }
     // 倒序：最新在上
     return out.sort((a, b) => b.hourStart - a.hourStart)
-  }, [items, isToday, nowHourStart])
+  }, [items, analyzingHours, isToday, nowHourStart])
+
+  // 有采集中/分析中占位时：60s tick 顺带重拉数据，分析落盘后原地更新
+  const reloadRef = useRef(reload)
+  reloadRef.current = reload
+  const hasPlaceholderRef = useRef(false)
+  hasPlaceholderRef.current = timeline.some((i) => i.kind !== 'entry')
+
+  useEffect(() => {
+    // 每 60s 检查一次，跨整点/跨天时刷新时间轴；有占位行时顺带重拉数据
+    const id = setInterval(() => {
+      setNow(Date.now())
+      if (hasPlaceholderRef.current) reloadRef.current()
+    }, 60_000)
+    function onVis(): void {
+      if (document.visibilityState === 'visible') setNow(Date.now())
+    }
+    document.addEventListener('visibilitychange', onVis)
+    return () => {
+      clearInterval(id)
+      document.removeEventListener('visibilitychange', onVis)
+    }
+  }, [])
 
   return (
     <div className="h-full flex flex-col">
@@ -109,7 +126,8 @@ export function Timeline() {
       </NoDrag>
 
       <div className="flex-1 overflow-auto px-7 py-[22px]">
-        {loading ? (
+        {/* 已有数据时静默重拉（60s 占位刷新），不闪加载态 */}
+        {loading && !data ? (
           <p className="text-stone-400">加载中...</p>
         ) : isFuture ? (
           <Empty text="这一天还没到呢" />
@@ -137,6 +155,7 @@ export function Timeline() {
 type TimelineItem =
   | { kind: 'entry'; entry: TimelineEntryRow; hourStart: number }
   | { kind: 'pending'; hourStart: number }
+  | { kind: 'analyzing'; hourStart: number }
 
 /** entry 气泡内容：仅 summary（记下时间由 TimelineRow 渲染到卡片右下角） */
 function EntryBody({ entry }: { entry: TimelineEntryRow }) {
@@ -144,16 +163,22 @@ function EntryBody({ entry }: { entry: TimelineEntryRow }) {
 }
 
 function TimelineRow({ item, isLast, nowHourStart, showAsDayEnd }: { item: TimelineItem; isLast: boolean; nowHourStart: number; showAsDayEnd?: boolean }) {
-  // 占位锚点=观察中时段的结束整点，跨到次日 0 点时在当天视角下显示 24:00
+  // 标签：pending 锚点=采集中时段的结束整点（跨次日 0 点 → 当天视角 24:00）；
+  // analyzing 锚点=被分析时段的开始整点，同样显示结束时刻（23 点档 → 24:00）
   const localHour =
-    item.kind === 'pending' ? formatPendingHour(item.hourStart) : showAsDayEnd ? formatHourEnd(item.hourStart) : formatHourLocal(item.hourStart)
+    item.kind === 'pending'
+      ? formatPendingHour(item.hourStart)
+      : item.kind === 'analyzing' || showAsDayEnd
+        ? formatHourEnd(item.hourStart)
+        : formatHourLocal(item.hourStart)
   const isCurrentHour = item.hourStart === nowHourStart
   const isPast = item.hourStart < nowHourStart
 
   // 状态判定：
   // - 已封存 OR 过去小时：完成态，圆点实心（填充色 = 边框色）
   // - 当前小时 entry：收集中，空心
-  // - pending 占位（下一整点）：收集中，空心
+  // - pending 占位（下一整点）：采集中，空心
+  // - analyzing 占位：分析中（小时已结束、LLM 任务进行中），空心
   let dotStyle: React.CSSProperties
   let body: React.ReactNode
   let cardCls: string
@@ -169,9 +194,14 @@ function TimelineRow({ item, isLast, nowHourStart, showAsDayEnd }: { item: Timel
     body = <EntryBody entry={item.entry} />
     cardCls = 'border-stone-300 bg-cream-200 card-hover'
   } else {
-    // pending 占位：下一整点收集中
+    // 占位行：pending=当前小时采集中；analyzing=小时已结束、分析任务进行中
     dotStyle = { background: 'transparent', borderColor: 'var(--accent)' }
-    body = <p className="text-[13.5px] leading-[1.6] text-stone-400 italic">Navi 正在观察这一小时，整点会生成总结</p>
+    body =
+      item.kind === 'pending' ? (
+        <p className="text-[13.5px] leading-[1.6] text-stone-400 italic">Navi 正在观察这一小时，整点会生成总结</p>
+      ) : (
+        <p className="text-[13.5px] leading-[1.6] text-stone-400 italic">这一小时结束了，Navi 正在分析归纳…</p>
+      )
     cardCls = 'border-stone-300 border-dashed bg-cream-50'
   }
 
