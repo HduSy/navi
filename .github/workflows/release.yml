@@ -83,7 +83,7 @@ jobs:
           releaseBody: |
             Navi — your AI work companion that observes, remembers, and grows with you.
 
-            **macOS**: download `Navi_*_aarch64.dmg` (Apple Silicon). Unsigned — right-click → **Open** on first launch to dismiss Gatekeeper.
+            **macOS (Apple Silicon)**: download `Navi_*_aarch64.dmg`, open it and **double-click `install.command`** — it copies Navi to `/Applications`, clears the quarantine flag (xattr) and launches it. Terminal will ask for your admin password once. If macOS blocks the script itself (unsigned): right-click → **Open**, or on macOS 15+ go to System Settings → **Privacy & Security** → **Open Anyway** — the classic unsigned-app workaround.
 
             **Windows**: download `Navi_*_x64-setup.exe` (NSIS installer, per-user install, no admin needed). Unsigned — on first launch click **More info → Run anyway** to dismiss SmartScreen.
           # 保持草稿（draft），不会自动公开。确认无误后到 Release 页面点
@@ -91,3 +91,15 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: --target ${{ matrix.target }}
+
+      # tauri-action 只上传打包产物（不含 scripts/）。这里把 install.command
+      # 注入 macOS DMG（塞到 Navi.app 旁边），再 clobber 覆盖同名资产，
+      # 用户打开 DMG 双击 install.command 即可安装并绕过 Gatekeeper。
+      - name: Inject install.command into DMG
+        if: matrix.os == 'macos-latest'
+        run: |
+          DMG=$(find apps/desktop/src-tauri/target -name 'Navi_*_aarch64.dmg' -type f | head -n 1)
+          bash scripts/patch-dmg.sh "$DMG"
+          gh release upload "${{ github.ref_name }}" "$DMG" --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

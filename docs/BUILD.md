@@ -42,14 +42,16 @@ pnpm tauri icon resources/navi-logo-b1-aperture-bite-1024.png   # 输出到 src-
 ## 打包
 
 ```bash
-cd apps/desktop
-pnpm dist        # = tauri build（先跑 beforeBuildCommand: pnpm build:vite，
-                 #   再编译 Rust 并打 bundle）
+pnpm dist        # 仓库根目录执行：先 tauri build（编译 Rust + 打 bundle），
+                 # 再跑 scripts/patch-dmg.sh 把 install.command 注入 dmg
 ```
+
+也可只跑构建不注入：`cd apps/desktop && pnpm dist`（= `tauri build`）。
 
 产物输出到 `apps/desktop/src-tauri/target/release/bundle/`：
 
-- **macOS**：`bundle/macos/` → `Navi.app` + `Navi_<ver>_aarch64.dmg`
+- **macOS**：`bundle/macos/` → `Navi.app` + `Navi_<ver>_aarch64.dmg`（注入后 dmg 内含
+  `install.command`，双击即可安装并绕过 Gatekeeper）
 - **Windows**：`bundle/nsis/` → `Navi_<ver>_x64-setup.exe`（NSIS 安装包，按用户安装免管理员）
 - **Linux**：`bundle/deb/`、`bundle/appimage/`（未在 CI 构建）
 
@@ -94,6 +96,9 @@ macOS 下载后需绕过 Gatekeeper，Windows 需绕过 SmartScreen。
    `apps/desktop/package.json` 必须有 `"tauri": "tauri"` 脚本）+ `GH_TOKEN`
    自动建 Release、把两个平台的产物附到同一个 Release
    （Tauri 没有 electron-builder 的 `--publish` 参数，建 Release 交给 tauri-action）
+5. macOS job 追加一步 `Inject install.command into DMG`：用
+   `scripts/patch-dmg.sh` 把安装脚本塞进 dmg（UDRW → 挂载注入 → UDZO），
+   再 `gh release upload --clobber` 覆盖同名 dmg 资产
 
 ### 代码签名（可选）
 
@@ -120,8 +125,10 @@ runner 上没有签名证书，产物未签名（macOS + Windows）。若想发�
 
 解决办法（二选一）：
 - **开发者分发**：配置代码签名证书后打包，彻底免拦截
-- **本地自用**：双击项目里的 `scripts/install.command`，它会对 `.app` 执行
-  `xattr -dr com.apple.quarantine` 再打开，跳过弹窗
+- **终端用户**：打开 dmg 双击里面的 `install.command`（已注入，见上文「打包」），
+  它会拷贝到 `/Applications` 并对 `.app` 执行 `xattr -dr com.apple.quarantine` 再打开，
+  跳过弹窗。若脚本自身被拦：右键 → 打开（macOS 14-），或系统设置 → 隐私与安全性 →
+  仍要打开（macOS 15+），或在终端 `bash /Volumes/Navi/install.command`
 
 ### 2. `@esbuild/*` 等 pnpm 断符号链接导致 `ENOENT`（Electron 时代遗留）
 

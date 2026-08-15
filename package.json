@@ -32,6 +32,7 @@
   "scripts": {
     "dev": "pnpm --filter @navi/desktop dev",
     "build": "pnpm --filter @navi/desktop build",
+    "dist": "pnpm --filter @navi/desktop dist && bash scripts/patch-dmg.sh",
     "preview": "pnpm --filter @navi/desktop preview",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint"
