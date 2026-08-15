@@ -10,6 +10,9 @@ interface DisplayMessage extends ChatMessageRow {
 // 切 tab 离开后回到 Chat 时，恢复上次的滚动位置
 const SCROLL_KEY = 'navi:chat:scrollTop'
 
+// 空状态（首次进入 / /clear 后）的开场气泡建议
+const SUGGESTIONS = ['最近在忙啥？', '踩过什么坑？', '幽默点', '今天适合摸鱼吗？']
+
 export function Chat() {
   const [stats, setStats] = useState<SessionStats | null>(null)
   const [messages, setMessages] = useState<DisplayMessage[]>([])
@@ -46,9 +49,11 @@ export function Chat() {
     }
   }, [])
 
-  async function send(): Promise<void> {
-    if (!input.trim() || sending) return
-    const text = input.trim()
+  // preset：气泡建议直接传入发送（绕过 input state，同步可用）
+  async function send(preset?: string): Promise<void> {
+    const raw = typeof preset === 'string' ? preset : input
+    if (!raw.trim() || sending) return
+    const text = raw.trim()
     setInput('')
     // /clear：清空聊天上下文（DB 历史 + 界面），不经模型路由
     if (text === '/clear') {
@@ -144,6 +149,18 @@ export function Chat() {
                     ? '问我「最近在忙啥」「踩过什么坑」，或者说「幽默点」调调我的脾气。'
                     : '先去「大脑」里让我有个能思考的脑子，我就能开口陪你聊。'}
                 </p>
+                <div className="mt-5 flex flex-wrap gap-2">
+                  {SUGGESTIONS.map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => void send(s)}
+                      disabled={sending}
+                      className="rounded-full border border-stone-300 bg-cream-200 px-3.5 py-1.5 text-[13px] text-stone-600 hover:bg-cream-50 hover:border-accent hover:text-stone-700 transition-colors disabled:opacity-50 disabled:cursor-default"
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
               </article>
             ) : (
               messages.map((m) => <MessageBubble key={m.id} msg={m} />)
@@ -164,7 +181,7 @@ export function Chat() {
                 disabled={sending}
                 className="flex-1 min-w-0 bg-cream-200 border border-stone-300 rounded px-3 py-2 text-[13.5px] text-stone-700 placeholder-stone-400 focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent-soft transition-colors duration-150 disabled:opacity-50"
               />
-              <Button onClick={send} disabled={sending || !input.trim()}>
+              <Button onClick={() => void send()} disabled={sending || !input.trim()}>
                 {sending ? '...' : '发送'}
               </Button>
             </NoDrag>
