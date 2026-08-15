@@ -10,6 +10,9 @@ const SCOPES: Array<{ key: Scope; label: string; desc: string }> = [
   { key: 'action', label: '行动力', desc: '听懂你"幽默点"这类指令并自我调整的脑子' }
 ]
 
+/** Drawer 出场过渡时长：与抽屉/遮罩的 exit transition 时长保持一致 */
+const DRAWER_EXIT_MS = 200
+
 /** 测试连接错误码 → 中文文案 */
 const TEST_ERROR_LABEL: Record<BrainTestErrorCode, string> = {
   AUTH_INVALID: 'API Key 无效',
@@ -155,6 +158,36 @@ function BrainConfigSheet({
   const [fetchErr, setFetchErr] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
+  // 开关抽屉：用 CSS transition 而非 keyframes——屏外起点直接写在 base style 上
+  // （首帧就是屏外），消除 keyframes 挂载首帧按自然位置绘制造成的白底闪现
+  const [phase, setPhase] = useState<'enter' | 'open' | 'exit'>('enter')
+  const closeTimerRef = useRef<number | null>(null)
+
+  // 等首帧画出屏外起点后，再切 open 触发过渡滑入（双 rAF 保证至少画过一帧）
+  useEffect(() => {
+    let raf2 = 0
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => setPhase('open'))
+    })
+    return () => {
+      cancelAnimationFrame(raf1)
+      cancelAnimationFrame(raf2)
+    }
+  }, [])
+
+  function requestClose(): void {
+    if (phase === 'exit') return
+    setPhase('exit')
+    closeTimerRef.current = window.setTimeout(onClose, DRAWER_EXIT_MS)
+  }
+
+  // 卸载时清理出场定时器
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current)
+    }
+  }, [])
+
   // baseUrl + apiKey 都填好才算"可拉取"
   const canFetch = Boolean(baseUrl && apiKey)
 
@@ -167,7 +200,8 @@ function BrainConfigSheet({
   }, [protocol, baseUrl, apiKey, model])
 
   // 自动拉取模型：进入 drawer 时若 baseUrl+apiKey 已配则拉一次；
-  // 配置过程中 baseUrl/apiKey/protocol 变化后，只要凑齐就自动拉一次（同一签名只拉一次）
+  // 配置过程中 baseUrl/apiKey/protocol 变化后，只要凑齐就自动拉一次（同一签名只拉一次）。
+  // 拉取成功后：当前模型不在返回列表里（含还没选模型）就默认选列表第一个。
   useEffect(() => {
     if (!baseUrl || !apiKey) return
     const sig = `${protocol}|${baseUrl}|${apiKey}`
@@ -181,7 +215,12 @@ function BrainConfigSheet({
           scope, provider: protocol, model, baseUrl, apiKey, temperature, protocol
         } as BrainProviderConfig)
         setModelOptions(list)
-        if (list.length === 0) setFetchErr('返回的模型列表为空')
+        if (list.length === 0) {
+          setFetchErr('返回的模型列表为空')
+        } else {
+          const first = list[0]
+          if (first !== undefined && !list.includes(model)) setModel(first)
+        }
       } catch (e) {
         setFetchErr(e instanceof Error ? e.message : String(e))
       } finally {
@@ -248,7 +287,7 @@ function BrainConfigSheet({
       await window.navi.saveBrain(scope, {
         scope, provider: protocol, model, baseUrl, apiKey, temperature, protocol
       } as BrainProviderConfig)
-      onClose()
+      requestClose()
     } catch (e) {
       setFetchErr(e instanceof Error ? e.message : String(e))
     } finally {
@@ -259,23 +298,31 @@ function BrainConfigSheet({
   /** 清除自定义，回退默认 */
   async function handleClear() {
     await window.navi.clearBrain(scope)
-    onClose()
+    requestClose()
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex pointer-events-none">
-      {/* 遮罩：延迟 100ms 淡入，与抽屉同时（240ms）结束 */}
+    <div className="fixed inset-0 z-50 pointer-events-none">
+      {/* 全屏遮罩：透明毛玻璃（backdrop blur），挂载即出现，无渐变无延迟 */}
       <div
-        onClick={onClose}
-        className="flex-1 bg-black/20 pointer-events-auto"
-        style={{ animation: 'navi-drawer-fade 140ms ease-out 100ms both' }}
-      />
-      {/* 抽屉：从右滑入，will-change 预分配合成层，挂载帧即从屏外开始 */}
-      <NoDrag
-        className="w-[420px] shrink-0 bg-cream-50 border-l border-stone-300 flex flex-col pointer-events-auto"
+        onClick={requestClose}
+        className="absolute inset-0 pointer-events-auto"
         style={{
-          animation: 'navi-drawer-in 240ms cubic-bezier(0.2, 0, 0, 1) both',
-          willChange: 'transform'
+          backdropFilter: 'blur(2px)',
+          WebkitBackdropFilter: 'blur(2px)',
+          backgroundColor: 'rgba(255, 255, 255, 0.18)'
+        }}
+      />
+      {/* 抽屉：absolute 定位叠在遮罩之上，transition 滑入/滑出；屏外起点在 base style 上 */}
+      <NoDrag
+        className="absolute inset-y-0 right-0 w-[420px] bg-cream-50 border-l border-stone-300 flex flex-col pointer-events-auto"
+        style={{
+          transform: phase === 'open' ? 'translateX(0)' : 'translateX(100%)',
+          transition: phase === 'exit'
+            ? 'transform 200ms cubic-bezier(0.4, 0, 1, 1)'
+            : 'transform 260ms cubic-bezier(0.22, 0.06, 0.05, 0.98)',
+          willChange: 'transform',
+          boxShadow: '-12px 0 32px -16px rgba(28, 25, 23, 0.28)'
         }}
       >
         <header className="shrink-0 flex items-center justify-between px-5 pt-3 pb-2 border-b border-stone-300">
@@ -283,7 +330,7 @@ function BrainConfigSheet({
             <h3 className="text-[15px] font-semibold text-stone-700">{scopeInfo.label} 配置</h3>
             <span className="mono text-[11px] text-stone-400">{scope}</span>
           </div>
-          <button onClick={onClose} className="text-stone-400 hover:text-stone-600 text-xl leading-none">×</button>
+          <button onClick={requestClose} className="text-stone-400 hover:text-stone-600 text-xl leading-none">×</button>
         </header>
 
         <div className="flex-1 overflow-auto px-5 py-4 space-y-4">
@@ -413,7 +460,7 @@ function BrainConfigSheet({
             <Button variant="outlined" size="sm" onClick={() => void handleClear()}>恢复默认</Button>
           )}
           <div className="ml-auto flex items-center gap-2">
-            <Button variant="outlined" size="sm" onClick={onClose}>取消</Button>
+            <Button variant="outlined" size="sm" onClick={requestClose}>取消</Button>
             <Button size="sm" onClick={() => void handleSave()} disabled={saving || !baseUrl || !apiKey || !model}>
               {saving ? '保存中...' : '保存'}
             </Button>

@@ -1,4 +1,4 @@
-import { useAsync, Button, Empty, Label, Markdown, Tag, formatTime, basename, NoDrag, useScrollRestore, ReadingBody } from '../components'
+import { useAsync, Button, Empty, Label, Markdown, formatTime, NoDrag, useScrollRestore, ReadingBody } from '../components'
 import { useState, useEffect } from 'react'
 import type { WikiPage } from '../types'
 
@@ -140,8 +140,6 @@ function CardItem({ page, onOpen }: { page: WikiPage; onOpen: () => void }) {
   // 卡片描述只展示「教训」段（旧格式无分段时退化为整篇纯文本）
   const lesson = sectionOf(page.body, '教训')
   const preview = (lesson || stripMarkdown(page.body)).slice(0, 80)
-  const sources = page.frontmatter.sourceSessions ?? []
-  const refs = page.frontmatter.refs ?? []
   return (
     <button
       onClick={onOpen}
@@ -149,21 +147,7 @@ function CardItem({ page, onOpen }: { page: WikiPage; onOpen: () => void }) {
     >
       <h3 className="mono text-sm font-medium text-stone-700 mb-1.5">{page.frontmatter.title}</h3>
       {preview && <p className="text-[12.5px] leading-[1.55] text-stone-500 line-clamp-3 mb-4 flex-1">{preview}</p>}
-      <div className="mono text-[11px] text-stone-400 mt-auto">
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {sources.length > 0 && (
-            <>
-              <span>来自</span>
-              {sources.slice(0, 2).map((s, i) => (
-                <Tag key={i}>{basename(s).slice(0, 8)}</Tag>
-              ))}
-              {sources.length > 2 && <span>等 {sources.length} 个</span>}
-            </>
-          )}
-          {refs.length > 0 && <span>{sources.length > 0 ? '·' : ''} 关联 {refs.length} 处</span>}
-        </div>
-        <div className="text-right mt-1">更新于 {formatTime(page.frontmatter.updatedAt)}</div>
-      </div>
+      <div className="mono text-[11px] text-stone-400 mt-auto text-right">更新于 {formatTime(page.frontmatter.updatedAt)}</div>
     </button>
   )
 }
