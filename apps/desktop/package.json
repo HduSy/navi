@@ -10,6 +10,7 @@
     "build:vite": "vite build",
     "preview": "tauri build --no-bundle",
     "dist": "tauri build",
+    "tauri": "tauri",
     "typecheck": "tsc --noEmit -p tsconfig.web.json"
   },
   "dependencies": {

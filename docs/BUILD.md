@@ -65,7 +65,7 @@ bundle/macos/
 | workflow | 触发 | 作用 |
 |---|---|---|
 | `ci.yml` | push 到 main / PR | ubuntu 上跑 `pnpm typecheck` + 前端 `vite build`，防回归 |
-| `release.yml` | 推 `v*` tag（也可手动 Run workflow） | macOS arm64 runner 打 dmg/app，自动建 GitHub Release |
+| `release.yml` | 推 `v*` tag（手动 Run workflow 需选 `v*` tag 作 ref） | macOS arm64 runner 打 dmg/app，自动建 GitHub Release |
 
 ### 发版流程
 
@@ -88,7 +88,10 @@ push 后 `release.yml` 自动构建并创建 GitHub Release，附上 `Navi_<ver>
 1. `macos-latest`（arm64 runner，Apple Silicon）——与本机架构一致，原生编译
    `rusqlite`，无需交叉编译
 2. `pnpm install --frozen-lockfile`（lockfile 已入库）
-3. `tauri-apps/tauri-action` + `GH_TOKEN` 自动建 Release 传产物
+3. `swatinem/rust-cache` 缓存 Cargo 构建产物，加速重复构建
+4. `tauri-apps/tauri-action` 执行 `npm run tauri build`（所以
+   `apps/desktop/package.json` 必须有 `"tauri": "tauri"` 脚本）+ `GH_TOKEN`
+   自动建 Release 传产物
    （Tauri 没有 electron-builder 的 `--publish` 参数，建 Release 交给 tauri-action）
 
 ### 代码签名（可选）
