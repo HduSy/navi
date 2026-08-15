@@ -214,7 +214,8 @@ export function Chat() {
           </DragRegion>
         </section>
 
-        <aside className="w-[280px] shrink-0 bg-cream-50 p-[18px] overflow-auto">
+        {/* 面板不带背景：透出底层品牌水印（与页面级容器同规则） */}
+        <aside className="w-[280px] shrink-0 p-[18px] overflow-auto">
           {stats ? (
             <>
               <div className="grid grid-cols-2 gap-2 mb-5">

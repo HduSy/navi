@@ -195,6 +195,38 @@ function NaviFace(): React.ReactElement {
   )
 }
 
+/** Navi 品牌水印：logo 的圆环印记居中铺在整窗背景，低透明度、不挡交互、不随页面滚动 */
+function NaviWatermark(): React.ReactElement {
+  return (
+    <div aria-hidden className="pointer-events-none select-none fixed inset-0 z-0 flex items-center justify-center">
+      <svg viewBox="96 120 800 800" width="70vmin" height="70vmin" fill="none" style={{ opacity: 0.06 }}>
+        {/* 内圈细刻度环 */}
+        <circle cx="488" cy="512" r="246" stroke="#94A3B8" strokeOpacity="0.35" strokeWidth="2" strokeDasharray="1.5 10" strokeLinecap="round" />
+        {/* 主圆环：被右上圆球咬开缺口 */}
+        <path d="M 674 239 A 330 330 0 1 0 778 355" stroke="#334155" strokeWidth="52" strokeLinecap="round" />
+        {/* 右上圆球 + 高光 */}
+        <circle cx="778" cy="250" r="52" fill="#1E293B" />
+        <circle cx="766" cy="238" r="16" fill="#FFFFFF" opacity="0.92" />
+        {/* Navi 文字嵌环中 */}
+        <text
+          x="488"
+          y="578"
+          textAnchor="middle"
+          fontFamily="'Smiley Sans','PingFang SC',system-ui,sans-serif"
+          fontSize="168"
+          fontWeight="700"
+          fill="#334155"
+          letterSpacing="3"
+        >
+          Navi
+        </text>
+        {/* 底部发丝线 */}
+        <line x1="372" y1="688" x2="604" y2="688" stroke="#CBD5E1" strokeWidth="2" />
+      </svg>
+    </div>
+  )
+}
+
 export function App() {
   const accent = useAccentFromRoute()
 
@@ -206,9 +238,11 @@ export function App() {
   return (
     <div className="grid h-screen w-screen overflow-hidden bg-cream text-stone-600"
       style={{ gridTemplateColumns: '224px 1fr', gridTemplateRows: '40px 1fr', gridTemplateAreas: '"header header" "nav main"' }}>
+      {/* 品牌水印：垫在所有内容之下 */}
+      <NaviWatermark />
       {/* 顶部 header：drag region，红绿灯左侧留 76px */}
       <DragRegion
-        className="flex items-center pl-[76px] pr-4 border-b border-stone-300 bg-cream-50"
+        className="relative z-10 flex items-center pl-[76px] pr-4 border-b border-stone-300 bg-cream-50"
         style={{ gridArea: 'header' }}
       >
         <span className="font-brand text-base font-bold tracking-[-0.01em] text-stone-700 leading-none">Navi</span>
@@ -220,7 +254,7 @@ export function App() {
       </DragRegion>
 
       {/* 左 nav */}
-      <nav className="border-r border-stone-300 bg-cream-50 flex flex-col min-h-0" style={{ gridArea: 'nav' }}>
+      <nav className="relative z-10 border-r border-stone-300 bg-cream-50 flex flex-col min-h-0" style={{ gridArea: 'nav' }}>
         <DragRegion className="h-2 shrink-0" />
         <NoDrag className="flex-1 overflow-auto px-2 py-2.5">
           {NAV_SECTIONS.map((section) => (
@@ -258,7 +292,7 @@ export function App() {
       </nav>
 
       {/* 右 main */}
-      <main className="flex flex-col overflow-hidden min-h-0" style={{ gridArea: 'main' }}>
+      <main className="relative z-10 flex flex-col overflow-hidden min-h-0" style={{ gridArea: 'main' }}>
         <Routes>
           <Route path="/" element={<Chat />} />
           <Route path="/timeline" element={<Timeline />} />
