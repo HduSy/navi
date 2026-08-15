@@ -5,11 +5,25 @@
 
 > Your AI work companion that observes, remembers, and grows with you.
 
-Navi 是一个本地优先的桌面 AI 伙伴。它默默观察你和 Claude Code（及更多本地工具）的每一次协作，自己长出人格、技能、经验、项目认知和社交关系——能聊天、能自我调校、也能回看你自己一段时间的工作轨迹。
+## 愿景
 
-- **本地优先**：所有数据存在 `userData/navi.db` + `userData/wiki/`，零云端
-- **三层记忆架构**（Karpathy LLM Wiki）：Raw Sources（不可变 jsonl）→ Wiki（LLM 维护的 markdown DAG）→ Schema（`navi.md` 工作流配置）
-- **可观察、可干预**：你看到的每一页 markdown 都可以打开编辑；三大脑（理解力 / 聊天力 / 行动力）支持应用内独立配置任意模型供应商
+你和 AI 一起干了很多活，但这些经历默认散落在 jsonl 里，没有谁帮你记住。Navi 想补上这一块：
+
+- **协作经历值得自动沉淀**——做成了什么、踩过什么坑、和谁打过交道，应当自己长成记忆，而不是每次从零开始
+- **记忆只属于你**——本地优先，所有数据留在你自己的磁盘上，不上云、不外发
+- **伙伴不是镜像，是陪伴**——Navi 有自己的脾气和成长轨迹，你对它的调教它都记得；而它对你的了解，最终通过认知同步回流给你在用的每一个 AI 工具
+
+## TL;DR
+
+Navi 是一个本地优先的桌面 AI 伙伴（Electron + React + SQLite）。它默默观察你和 Claude Code（及更多本地工具）的每一次协作，自己长出人格、技能、经验、项目认知和社交关系——能聊天、能自我调校、也能回看你自己一段时间的工作轨迹。
+
+- **时间线**：每小时自动总结你「做成了什么」，采集中 → 分析中 → 结果三态可视，跨天自动回填近 7 天缺档
+- **日记**：每晚 21 点把当天聚合成结构化日报（做了什么 / 进行中 / 关键决策 / 待办）
+- **聊天**：流式逐字渲染 + 思考态指示；有脾气、有记忆，聊天里可直接调教人格，`/clear` 一键清空上下文
+- **经验 / 项目 / 技能 / 人物关系**：全部从会话自动长出，沉淀为可编辑的 markdown wiki
+- **三大脑**：分析 / 对话 / 行动三个 scope 各配各的模型，双协议（Anthropic / OpenAI 兼容），7 家供应商预设，限流自动退避重试
+- **认知同步**：人格 / 项目 / 经验回流到各 AI 工具的全局上下文，分钟级增量
+- **本地优先**：所有数据存在 `userData/navi.db` + `userData/wiki/`，零云端；配过 Claude Code 即零配置可用
 
 ## 界面一览
 
@@ -31,13 +45,13 @@ Navi 是一个本地优先的桌面 AI 伙伴。它默默观察你和 Claude Cod
 
 ![聊天](docs/screenshots/chat.png)
 
-和 Navi 直接对话。回复由 dialogue brain（LLM + RAG）生成：注入人格维度、自由描述、命中的 wiki 记忆和当前状态。说「幽默点」「话少点」这类指令时，action brain 会先识别意图并自我调校人格——每次调整都进 `personality_history`，可回滚。右侧面板统计你跟 AI 干活的次数、聊过的消息、动手次数和踩过的错误。
+和 Navi 直接对话。回复由 dialogue brain（LLM + RAG）生成：注入人格维度、自由描述、命中的 wiki 记忆和当前状态，**SSE 流式逐字渲染**，等待期有思考态指示（弹跳点 → 逐字输出）。说「幽默点」「话少点」这类指令时，action brain 会先识别意图并自我调校人格——每次调整都进 `personality_history`，可回滚。`/clear` 一键清空聊天上下文（DB 历史与界面一起清），空状态提供可点的开场气泡。右侧面板统计你跟 AI 干活的次数、聊过的消息、动手次数和踩过的错误。
 
 ### 🕐 时间线 —— 每小时记下你做成了什么
 
 ![时间线](docs/screenshots/timeline.png)
 
-Scheduler 每 5 分钟轮询，把每个已结束小时的你和 Claude Code 的对话交给 analysis brain 总结——聚焦「成果」而非「动作」，按项目组织。整点自动封存，支持日期前后翻阅。
+Scheduler 每 5 分钟轮询，把每个已结束小时的你和 Claude Code 的对话交给 analysis brain 总结——聚焦「成果」而非「动作」，按项目组织。每个时段三态可视：当前小时「采集中」→ 小时结束后分析任务执行期间「分析中」→ 落盘展示结果（分析完成界面原地刷新）。时间语义严格区分首尾：当天最后一个时段显示为 24:00，新一天从 00:00 起步。跨天后自动回填近 7 天历史缺档——合盖休眠、隔几天再开也不丢档。支持日期前后翻阅。
 
 ### 📖 日记 —— 每晚 21 点自动生成
 
@@ -93,7 +107,9 @@ Navi 的 LLM 用途分三个 scope，各自独立配置：
 
 - **供应商预设**：Anthropic / OpenAI / 智谱 GLM / 火山方舟 / DeepSeek / 通义千问 / OpenRouter 一键套用
 - **协议切换**：Anthropic Messages / OpenAI Chat Completions
-- **自动拉模型**：填好 baseUrl + apiKey 自动拉取模型列表
+- **自动拉模型**：填好 baseUrl + apiKey 自动拉取模型列表；下拉可编辑，供应商列表滞后时手输任意 model id
+- **限流自愈**：429/529 指数退避自动重试（尊重 Retry-After，1s/2s/4s+抖动），对话/分析全路径生效
+- **推理模型友好**：max_tokens 预算覆盖思考开销——glm-5.3 这类思考不可关停且计入预算的模型不会吐空回复；对话走 SSE 流式
 - **连通性测试**：max_tokens=1 探测请求 + 10s 超时 + 12 种错误分类（Key 无效 / 限流 / 余额不足…）
 - **安全存储**：apiKey 走系统钥匙串（safeStorage）加密入库，不落明文
 - **零配置可用**：没配过的 scope 自动从 `~/.claude/settings.json` 派生，配过 Claude Code 开箱即用
@@ -121,6 +137,8 @@ navi/
 
 ## 数据流
 
+三层记忆架构（Karpathy LLM Wiki）：Raw Sources（不可变 jsonl）→ Wiki（LLM 维护的 markdown DAG）→ Schema（`navi.md` 工作流配置）。
+
 ```
 Claude Code session (.jsonl)            Raw Sources（不可变）
         │
@@ -140,7 +158,7 @@ Claude Code session (.jsonl)            Raw Sources（不可变）
 
 ## 快速开始
 
-需要 Node ≥ 22、pnpm ≥ 10.7 < 11。
+需要 Node ≥ 22、pnpm ≥ 10.7（且 < 11）。
 
 ```bash
 pnpm install                 # 首次安装
@@ -176,7 +194,7 @@ CI（typecheck + build）与发版（tag 触发）见 [.github/workflows](.githu
 - DB：`<userData>/navi.db`（SQLite + WAL）
 - Wiki：`<userData>/wiki/`（markdown 文件树 + `navi.md` schema）
 
-开发模式下 `<userData>` 在 macOS 上是 `~/Library/Application Support/Electron`。
+开发模式下 `<userData>` 在 macOS 上是 `~/Library/Application Support/@navi/desktop`。
 
 ## 工作原理
 
