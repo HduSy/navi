@@ -6,21 +6,39 @@
 
 use std::path::PathBuf;
 
-pub fn app_data_dir() -> PathBuf {
+/// Electron 版 userData 的两个历史路径：
+/// - dev 模式用 package.json 的 name（含 scope）→ `@navi/desktop`
+/// - 打包版用 electron-builder productName → `Navi`
+/// 优先沿用已存在的旧目录（老用户数据原地续用），全新安装落到打包名。
+const LEGACY_DIRS: [&str; 2] = ["@navi/desktop", "Navi"];
+
+fn base_data_dir() -> PathBuf {
     #[cfg(target_os = "macos")]
     {
         dirs::home_dir()
             .unwrap_or_else(|| PathBuf::from("."))
-            .join("Library/Application Support/Navi")
+            .join("Library/Application Support")
     }
     #[cfg(target_os = "windows")]
     {
-        dirs::data_dir().unwrap_or_else(|| PathBuf::from(".")).join("Navi")
+        dirs::data_dir().unwrap_or_else(|| PathBuf::from("."))
     }
     #[cfg(target_os = "linux")]
     {
-        dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("Navi")
+        dirs::config_dir().unwrap_or_else(|| PathBuf::from("."))
     }
+}
+
+pub fn app_data_dir() -> PathBuf {
+    let base = base_data_dir();
+    // 依优先级探测旧库（以 navi.db 为锚点；@navi/desktop 是 dev 模式数据所在，优先）
+    for name in LEGACY_DIRS {
+        let candidate = base.join(name);
+        if candidate.join("navi.db").exists() {
+            return candidate;
+        }
+    }
+    base.join("Navi")
 }
 
 pub fn wiki_root() -> PathBuf {
