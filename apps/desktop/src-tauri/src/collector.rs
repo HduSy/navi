@@ -1,7 +1,14 @@
 //! 对应 @navi/core/src/collector.ts：扫描 ~/.claude/projects 下的 session jsonl 并解析
 
 use crate::util::parse_js_date;
+use once_cell::sync::Lazy;
+use regex::Regex;
 use serde::Serialize;
+
+// 性能：list_session_files 逐文件调用，静态预编译（每次调用运行时编译即几百次/轮）
+static SESSION_ID_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}").unwrap()
+});
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -53,8 +60,7 @@ fn projects_dir() -> std::path::PathBuf {
 
 fn extract_session_id(file_name: &str) -> Option<String> {
     let base = file_name.strip_suffix(".jsonl").unwrap_or(file_name);
-    let re = regex::Regex::new(r"(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}").unwrap();
-    re.find(base).map(|m| m.as_str().to_string())
+    SESSION_ID_RE.find(base).map(|m| m.as_str().to_string())
 }
 
 /// 列出所有 ClaudeCode session 文件（仅 stat，不读内容）

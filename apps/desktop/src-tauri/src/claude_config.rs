@@ -1,6 +1,11 @@
 //! 对应 @navi/core/src/claude-config.ts：读 ~/.claude/settings.json 的 env 块
 
+use once_cell::sync::Lazy;
+use regex::Regex;
 use serde::Serialize;
+
+// 注意：Rust regex 不允许字符类内裸写 '['，需转义（JS 正则两者皆可）
+static MODEL_SUFFIX_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\s*[\[（(][^\])}]*[\])）]\s*$").unwrap());
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ClaudeEnvConfig {
@@ -25,9 +30,7 @@ fn strip_model_suffix(m: &str) -> String {
         return String::new();
     }
     let trimmed = m.trim();
-    // 注意：Rust regex 不允许字符类内裸写 '['，需转义（JS 正则两者皆可）
-    let re = regex::Regex::new(r"\s*[\[（(][^\])}]*[\])）]\s*$").unwrap();
-    let stripped = re.replace(trimmed, "").trim().to_string();
+    let stripped = MODEL_SUFFIX_RE.replace(trimmed, "").trim().to_string();
     if stripped.is_empty() {
         m.to_string()
     } else {

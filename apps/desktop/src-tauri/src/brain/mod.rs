@@ -8,7 +8,24 @@
 
 pub mod presets;
 
+use once_cell::sync::Lazy;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
+
+// 性能：以下正则此前在热路径里逐次运行时编译，静态预编译一次复用
+static ANTHROPIC_PATH_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)/anthropic(/|$)").unwrap());
+static VERSION_SUFFIX_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"/v\d+$").unwrap());
+static ERR_MODEL_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?i)model.*(not found|does not exist|not available)").unwrap());
+static ERR_CTX_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)context.*(length|window|too long)").unwrap());
+static ERR_QUOTA_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)quota|insufficient|balance|limit").unwrap());
+static ERR_AUTH_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?i)unauthor|invalid.*api.*key|invalid.*token").unwrap());
+static ERR_RATE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)rate.?limit|too many requests").unwrap());
+static ERR_NF_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)not found|unknown.*model").unwrap());
+static TIMEOUT_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)timed?\s*out|timeout").unwrap());
+static JSON_FENCE_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?is)```(?:json)?\s*([\s\S]*?)```").unwrap());
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -61,18 +78,14 @@ pub fn is_anthropic_protocol(base_url: &str, protocol: Option<WireProtocol>) -> 
     match protocol {
         Some(WireProtocol::Anthropic) => true,
         Some(WireProtocol::Openai) => false,
-        None => {
-            let re = regex::Regex::new(r"(?i)/anthropic(/|$)").unwrap();
-            re.is_match(base_url)
-        }
+        None => ANTHROPIC_PATH_RE.is_match(base_url),
     }
 }
 
 /// 对应 buildApiUrl：baseUrl 以 /vN 结尾直接追加，否则补 /v1
 fn build_api_url(base_url: &str, tail: &str) -> String {
     let root = base_url.trim_end_matches('/');
-    let re = regex::Regex::new(r"/v\d+$").unwrap();
-    if re.is_match(root) {
+    if VERSION_SUFFIX_RE.is_match(root) {
         format!("{}{}", root, tail)
     } else {
         format!("{}/v1{}", root, tail)
@@ -419,28 +432,22 @@ pub fn classify_brain_error(status: u16, body_text: &str) -> String {
     if status >= 500 {
         return "UPSTREAM_ERROR".into();
     }
-    let re_model = regex::Regex::new(r"(?i)model.*(not found|does not exist|not available)").unwrap();
-    let re_ctx = regex::Regex::new(r"(?i)context.*(length|window|too long)").unwrap();
-    let re_quota = regex::Regex::new(r"(?i)quota|insufficient|balance|limit").unwrap();
-    let re_auth = regex::Regex::new(r"(?i)unauthor|invalid.*api.*key|invalid.*token").unwrap();
-    let re_rate = regex::Regex::new(r"(?i)rate.?limit|too many requests").unwrap();
-    let re_nf = regex::Regex::new(r"(?i)not found|unknown.*model").unwrap();
-    if re_model.is_match(&t) {
+    if ERR_MODEL_RE.is_match(&t) {
         return "MODEL_NOT_FOUND".into();
     }
-    if re_ctx.is_match(&t) {
+    if ERR_CTX_RE.is_match(&t) {
         return "CONTEXT_TOO_LONG".into();
     }
-    if re_quota.is_match(&t) {
+    if ERR_QUOTA_RE.is_match(&t) {
         return "QUOTA_EXCEEDED".into();
     }
-    if re_auth.is_match(&t) {
+    if ERR_AUTH_RE.is_match(&t) {
         return "AUTH_INVALID".into();
     }
-    if re_rate.is_match(&t) {
+    if ERR_RATE_RE.is_match(&t) {
         return "RATE_LIMITED".into();
     }
-    if re_nf.is_match(&t) {
+    if ERR_NF_RE.is_match(&t) {
         return "MODEL_NOT_FOUND".into();
     }
     "UNKNOWN".into()
@@ -506,8 +513,7 @@ pub async fn test_connection(
         }
         Err(e) => {
             let msg = e.to_string();
-            let timeout_re = regex::Regex::new(r"(?i)timed?\s*out|timeout").unwrap();
-            if timeout_re.is_match(&msg) || e.is_timeout() {
+            if TIMEOUT_RE.is_match(&msg) || e.is_timeout() {
                 BrainTestResult::Err { code: "TIMEOUT".into(), message: "请求超时（>10s）".into(), status: None }
             } else {
                 BrainTestResult::Err { code: "UPSTREAM_UNREACHABLE".into(), message: msg, status: None }
@@ -570,8 +576,7 @@ pub fn extract_json(text: &str) -> Option<String> {
     if text.is_empty() {
         return None;
     }
-    let fence = regex::Regex::new(r"(?is)```(?:json)?\s*([\s\S]*?)```").unwrap();
-    if let Some(caps) = fence.captures(text) {
+    if let Some(caps) = JSON_FENCE_RE.captures(text) {
         if let Some(m) = caps.get(1) {
             let candidate = m.as_str().trim();
             if !candidate.is_empty() {

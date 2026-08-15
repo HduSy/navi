@@ -58,7 +58,7 @@ fn query_rows_p(sql: &str, params: &[&dyn rusqlite::ToSql]) -> Vec<Value> {
 
 /* ───────────── 采集 ───────────── */
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_session_stats() -> Value {
     crate::ingest::get_session_stats()
 }
@@ -82,46 +82,46 @@ pub async fn send_message(app: AppHandle, msg: String, req_id: Option<String>) -
     crate::dialogue::send_message(&msg, on_delta).await
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_recent_messages() -> Vec<Value> {
     crate::dialogue::get_recent_messages(50)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn clear_chat() -> i64 {
     crate::dialogue::clear_chat()
 }
 
 /* ───────────── 人格 ───────────── */
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_personality() -> crate::personality::PersonalityState {
     crate::personality::get_personality()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn set_personality_dimensions(dims: Value) -> crate::personality::PersonalityState {
     crate::personality::set_personality_dimensions(&dims, "manual")
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn set_personality_free_text(text: String) -> crate::personality::PersonalityState {
     crate::personality::set_personality_free_text(&text, "manual")
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_personality_history() -> Vec<Value> {
     crate::personality::get_personality_history_rows(20)
 }
 
 /* ───────────── 大脑 ───────────── */
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_all_brain() -> Value {
     crate::brain_host::get_all_brain()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_brain(scope: String) -> crate::brain::BrainProviderConfig {
     crate::brain_host::get_brain(&scope)
 }
@@ -131,28 +131,28 @@ pub fn get_provider_presets() -> Vec<crate::brain::presets::ProviderPreset> {
     crate::brain::presets::provider_presets()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_claude_config_status() -> Value {
     crate::brain_host::get_claude_config_status()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn is_brain_customized(scope: String) -> bool {
     crate::brain_host::is_brain_customized(&scope)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_secret_protection_status() -> bool {
     crate::secret::is_secret_protection_available()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn save_brain(scope: String, cfg: crate::brain::BrainProviderConfig) -> crate::brain::BrainProviderConfig {
     crate::brain_host::save_brain_config(&scope, &cfg);
     crate::brain_host::get_brain(&scope)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn clear_brain(scope: String) -> crate::brain::BrainProviderConfig {
     crate::brain_host::clear_brain_config(&scope);
     crate::brain_host::get_brain(&scope)
@@ -170,7 +170,7 @@ pub async fn fetch_brain_models(cfg: crate::brain::BrainProviderConfig) -> Resul
 
 /* ───────────── 时间线 ───────────── */
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_timeline(date: Option<String>) -> Value {
     if date.is_none() {
         let rows = query_rows("SELECT * FROM timeline_entries ORDER BY hour_start DESC LIMIT 100");
@@ -222,12 +222,12 @@ pub async fn regenerate_all_timeline() -> Value {
 
 /* ───────────── 日记 ───────────── */
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_diaries() -> Vec<Value> {
     query_rows("SELECT * FROM diaries ORDER BY date DESC LIMIT 30")
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_diary(date: String) -> Value {
     let Some(ms) = from_local_date_str(&date) else {
         return Value::Null;
@@ -247,7 +247,7 @@ pub async fn generate_diary(date: String) -> Value {
 
 /* ───────────── 经验 ───────────── */
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_experiences() -> Vec<Value> {
     query_rows("SELECT * FROM experiences ORDER BY updated_at DESC LIMIT 100")
 }
@@ -259,7 +259,7 @@ pub async fn generate_experiences(file_path: String) {
 
 /* ───────────── 项目 ───────────── */
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_projects() -> Vec<Value> {
     // 只展示真实 git 仓库（项目目录下有 .git，含 worktree 的 .git 文件）
     query_rows("SELECT * FROM projects ORDER BY last_active_at DESC")
@@ -275,12 +275,12 @@ pub fn get_projects() -> Vec<Value> {
 
 /* ───────────── 技能 ───────────── */
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_skills() -> Vec<Value> {
     query_rows("SELECT * FROM skills ORDER BY call_count DESC")
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn toggle_skill(id: String, enabled: bool) -> bool {
     let conn = get_db().0.lock().unwrap();
     let cur: Option<i64> = conn
@@ -297,12 +297,12 @@ pub fn toggle_skill(id: String, enabled: bool) -> bool {
 
 /* ───────────── 人物/关系 ───────────── */
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_persons() -> Vec<Value> {
     query_rows("SELECT * FROM persons ORDER BY mention_count DESC")
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_relationships() -> Vec<Value> {
     query_rows("SELECT * FROM relationships")
 }
@@ -312,7 +312,7 @@ pub async fn generate_persons(file_path: String) {
     crate::ingest::generate_persons_for_session(&file_path).await
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn update_person_note(id: String, note: String, tags: Vec<String>) -> bool {
     let conn = get_db().0.lock().unwrap();
     let _ = conn.execute(
@@ -324,7 +324,7 @@ pub fn update_person_note(id: String, note: String, tags: Vec<String>) -> bool {
 
 /* ───────────── Wiki ───────────── */
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn read_wiki(rel_path: String) -> Option<String> {
     let fs_root = crate::paths::wiki_root();
     let abs = fs_root.join(&rel_path);
@@ -336,7 +336,7 @@ pub fn read_wiki(rel_path: String) -> Option<String> {
     std::fs::read_to_string(abs).ok()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn write_wiki(rel_path: String, content: String) -> bool {
     let fs_root = crate::paths::wiki_root();
     let abs = fs_root.join(&rel_path);
@@ -354,7 +354,7 @@ pub fn write_wiki(rel_path: String, content: String) -> bool {
     true
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_wiki(wiki_type: Option<String>) -> Vec<Value> {
     let w = wiki();
     let types: Vec<String> = match wiki_type {
@@ -381,7 +381,7 @@ pub fn list_wiki(wiki_type: Option<String>) -> Vec<Value> {
     all
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_backlinks(id: String) -> Vec<Value> {
     wiki()
         .backlinks(&id)
@@ -390,12 +390,12 @@ pub fn get_backlinks(id: String) -> Vec<Value> {
         .collect()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_wiki_log() -> String {
     std::fs::read_to_string(crate::paths::wiki_root().join("log.md")).unwrap_or_default()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn rebuild_index() -> bool {
     wiki().rebuild_index();
     true
@@ -403,17 +403,17 @@ pub fn rebuild_index() -> bool {
 
 /* ───────────── Lint / 认知同步 ───────────── */
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn lint() -> crate::lint::LintResult {
     crate::lint::lint_wiki()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn sync_cognition(force: Option<bool>) -> Value {
     crate::cognition_sync::run_cognition_sync(force.unwrap_or(false))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_cognition_sync_status() -> Value {
     crate::cognition_sync::get_cognition_sync_status()
 }

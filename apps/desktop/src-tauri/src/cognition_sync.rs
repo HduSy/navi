@@ -7,11 +7,24 @@
 use crate::db::get_db;
 use crate::paths::{app_data_dir, now_ms};
 use crate::state::wiki;
+use once_cell::sync::Lazy;
+use regex::Regex;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 const START: &str = "<!-- NAVI-COGNITION:START -->";
 const END: &str = "<!-- NAVI-COGNITION:END -->";
+
+// 性能：extract_preview 是 memoryDigest 全库扫描的逐页热路径，
+// 运行时 Regex::new 每页 6 次 × 数百页 = 数千次编译（百毫秒级起步），必须静态预编译
+static FM_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?s)^---[\s\S]*?---\n?").unwrap());
+static HEADING_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?m)^#{1,4}\s+.*$").unwrap());
+static WIKILINK_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\[\[([^\]]+)\]\]").unwrap());
+static BOLD_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\*\*([^*]+)\*\*").unwrap());
+static CODE_RE: Lazy<Regex> = Lazy::new(|| Regex::new("`([^`]+)`").unwrap());
+static BULLET_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?m)^[-*]\s+").unwrap());
+static BLOCK_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?s)<!-- NAVI-COGNITION:START -->[\s\S]*?<!-- NAVI-COGNITION:END -->").unwrap());
 
 fn home() -> std::path::PathBuf {
     dirs::home_dir().unwrap_or_default()
@@ -44,19 +57,12 @@ pub fn get_targets() -> Vec<SyncTarget> {
 
 /// 从 wiki body 提取一句话摘要：去 frontmatter/标题/重复标题前缀
 fn extract_preview(body: &str, title: &str) -> String {
-    let fm_re = regex::Regex::new(r"(?s)^---[\s\S]*?---\n?").unwrap();
-    let heading_re = regex::Regex::new(r"(?m)^#{1,4}\s+.*$").unwrap();
-    let wikilink_re = regex::Regex::new(r"\[\[([^\]]+)\]\]").unwrap();
-    let bold_re = regex::Regex::new(r"\*\*([^*]+)\*\*").unwrap();
-    let code_re = regex::Regex::new("`([^`]+)`").unwrap();
-    let bullet_re = regex::Regex::new(r"(?m)^[-*]\s+").unwrap();
-
-    let mut text = fm_re.replace(body, "").to_string();
-    text = heading_re.replace_all(&text, "").to_string();
-    text = wikilink_re.replace_all(&text, "$1").to_string();
-    text = bold_re.replace_all(&text, "$1").to_string();
-    text = code_re.replace_all(&text, "$1").to_string();
-    text = bullet_re.replace_all(&text, "").to_string();
+    let mut text = FM_RE.replace(body, "").to_string();
+    text = HEADING_RE.replace_all(&text, "").to_string();
+    text = WIKILINK_RE.replace_all(&text, "$1").to_string();
+    text = BOLD_RE.replace_all(&text, "$1").to_string();
+    text = CODE_RE.replace_all(&text, "$1").to_string();
+    text = BULLET_RE.replace_all(&text, "").to_string();
     text = crate::util::collapse_whitespace(text.trim());
     // 去掉与标题重复的前缀
     if !title.is_empty() {
@@ -278,9 +284,8 @@ fn wrap_block(content: &str) -> String {
 
 /// 把新的 Navi 块合并进已有文件内容，保留用户手写部分
 fn upsert_block(existing: &str, block: &str) -> String {
-    let re = regex::Regex::new(r"(?s)<!-- NAVI-COGNITION:START -->[\s\S]*?<!-- NAVI-COGNITION:END -->").unwrap();
-    if re.is_match(existing) {
-        return re.replace(existing, block).to_string();
+    if BLOCK_RE.is_match(existing) {
+        return BLOCK_RE.replace(existing, block).to_string();
     }
     let base = existing.trim_end();
     if base.is_empty() {

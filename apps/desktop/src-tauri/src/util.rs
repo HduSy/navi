@@ -6,26 +6,31 @@
 //! - slugify / looksLikeUUID 逐字符对齐 JS 正则
 
 use chrono::{Datelike, Local, TimeZone, Timelike};
+use once_cell::sync::Lazy;
+use regex::Regex;
+
+// 性能：looks_like_uuid 在项目目录扫描时逐文件调用，运行时编译 4 个正则开销不可忽略
+static UUID_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$").unwrap());
+static HEX_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[0-9a-f]{32,}$").unwrap());
+static ALNUM_DASH_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[a-z0-9-]+$").unwrap());
+static VOWEL_PAIR_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[aeiou]{2,}").unwrap());
 
 /// 对应 util.ts looksLikeUUID
 pub fn looks_like_uuid(name: &str) -> bool {
+    let lower = name.to_lowercase();
     // 标准 uuid
-    let uuid_re = regex::Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$").unwrap();
-    if uuid_re.is_match(&name.to_lowercase()) {
+    if UUID_RE.is_match(&lower) {
         return true;
     }
-    let lower = name.to_lowercase();
     // 32 位以上纯 hex
-    let hex_re = regex::Regex::new(r"^[0-9a-f]{32,}$").unwrap();
-    if hex_re.is_match(&lower) {
+    if HEX_RE.is_match(&lower) {
         return true;
     }
     // 长度 >= 24 的纯字母数字+连字符，且无 2 个连续元音（随机串特征）
     if lower.chars().count() >= 24 {
-        let alnum_dash = regex::Regex::new(r"^[a-z0-9-]+$").unwrap();
-        if alnum_dash.is_match(&lower) {
-            let vowel_pair = regex::Regex::new(r"[aeiou]{2,}").unwrap();
-            if !vowel_pair.is_match(&lower) {
+        if ALNUM_DASH_RE.is_match(&lower) {
+            if !VOWEL_PAIR_RE.is_match(&lower) {
                 let letters: String = lower.chars().filter(|c| c.is_ascii_alphabetic()).collect();
                 let no_dash: String = lower.chars().filter(|c| *c != '-').collect();
                 if letters.len() >= 16 && no_dash.len() >= 24 {

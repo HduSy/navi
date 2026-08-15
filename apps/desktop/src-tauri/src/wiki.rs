@@ -6,8 +6,16 @@
 //! - 页面整体格式 `---\n<fm>\n---\n<body 去尾空白>\n`
 
 use crate::util::slugify;
+use once_cell::sync::Lazy;
+use regex::Regex;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
+
+// 性能：frontmatter 解析是每次 listByType/backlinks 逐文件执行的热路径，
+// 正则必须静态预编译（运行时 Regex::new 每文件两次，几百文件即秒级卡顿）
+static KV_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^([a-zA-Z_]+):\s*(.*)$").unwrap());
+static LIST_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\s+-\s+(.*)$").unwrap());
+static WIKILINK_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\[\[([^\]]+)\]\]").unwrap());
 
 pub const WIKI_SUBDIRS: [&str; 8] = [
     "timeline",
@@ -207,12 +215,10 @@ pub fn parse_page(raw: &str, file_path: &str) -> WikiPage {
 
 /// 对应 parseFrontmatter：`key: value` + `  - item` 列表续行
 fn apply_frontmatter(fm: &mut WikiFrontmatter, text: &str) {
-    let kv_re = regex::Regex::new(r"^([a-zA-Z_]+):\s*(.*)$").unwrap();
-    let list_re = regex::Regex::new(r"^\s+-\s+(.*)$").unwrap();
     let mut raw: Vec<(String, serde_json::Value)> = Vec::new();
     let mut current_key = String::new();
     for line in text.split('\n') {
-        if let Some(caps) = kv_re.captures(line) {
+        if let Some(caps) = KV_RE.captures(line) {
             let key = caps.get(1).unwrap().as_str().to_string();
             let val = caps.get(2).unwrap().as_str().trim().to_string();
             current_key = key.clone();
@@ -237,7 +243,7 @@ fn apply_frontmatter(fm: &mut WikiFrontmatter, text: &str) {
                 serde_json::json!(unquoted)
             };
             raw.push((key, parsed));
-        } else if let Some(caps) = list_re.captures(line) {
+        } else if let Some(caps) = LIST_RE.captures(line) {
             let item = caps.get(1).unwrap().as_str().to_string();
             if !current_key.is_empty() {
                 if let Some(entry) = raw.iter_mut().rev().find(|(k, _)| *k == current_key) {
@@ -312,8 +318,8 @@ fn stringify_frontmatter(fm: &WikiFrontmatter) -> String {
 }
 
 pub fn extract_wikilinks(body: &str) -> Vec<String> {
-    let re = regex::Regex::new(r"\[\[([^\]]+)\]\]").unwrap();
-    re.captures_iter(body)
+    WIKILINK_RE
+        .captures_iter(body)
         .map(|c| c.get(1).map(|m| m.as_str().trim().to_string()).unwrap_or_default())
         .collect()
 }

@@ -1,6 +1,12 @@
 //! 对应 @navi/core/src/discover.ts：发现用户安装的 skills 与 MCP servers
 
+use once_cell::sync::Lazy;
+use regex::Regex;
 use serde::Serialize;
+
+// 性能：extract_skill_description 逐 skill 文件调用，静态预编译
+static SKILL_FM_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?s)^---\n(.*?)\n---").unwrap());
+static SKILL_FIELD_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)^(description|name)\s*:\s*(.*)$").unwrap());
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -108,19 +114,17 @@ pub fn discover_all_capabilities() -> Vec<InstalledCapability> {
 
 fn extract_skill_description(md: &str) -> String {
     // frontmatter 里的 description / name，或第一段非标题文本
-    let fm_re = regex::Regex::new(r"(?s)^---\n(.*?)\n---").unwrap();
-    let field_re = regex::Regex::new(r"(?i)^(description|name)\s*:\s*(.*)$").unwrap();
     let unquote = |v: &str| -> String {
         let v = v.trim();
         let v = v.strip_prefix('"').and_then(|s| s.strip_suffix('"')).unwrap_or(v);
         v.trim().to_string()
     };
-    if let Some(caps) = fm_re.captures(md) {
+    if let Some(caps) = SKILL_FM_RE.captures(md) {
         let fm = caps.get(1).unwrap().as_str();
         // 先找 description，找不到再找 name（JS 版顺序语义）
         for want in ["description", "name"] {
             if let Some(line) = fm.split('\n').find_map(|l| {
-                field_re.captures(l).filter(|c| c.get(1).unwrap().as_str().eq_ignore_ascii_case(want))
+                SKILL_FIELD_RE.captures(l).filter(|c| c.get(1).unwrap().as_str().eq_ignore_ascii_case(want))
             }) {
                 let val = unquote(line.get(2).unwrap().as_str());
                 if !val.is_empty() {
