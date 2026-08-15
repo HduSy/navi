@@ -1,67 +1,72 @@
-import Database from 'better-sqlite3'
-import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
-import { join } from 'node:path'
-import { app } from 'electron'
-import fs from 'node:fs'
-import * as schema from '@navi/core'
+//! 对应 main/db.ts + schema.ts 的表定义：
+//! - DDL 逐字对齐（含索引、WAL、foreign_keys、旧 schema 删库重建、diaries 列增量迁移）
 
-type DB = BetterSQLite3Database<typeof schema>
+use once_cell::sync::OnceCell;
+use rusqlite::Connection;
+use std::path::PathBuf;
+use std::sync::Mutex;
 
-let dbInstance: DB | null = null
+pub struct Db(pub Mutex<Connection>);
 
-export function getDb(): DB {
-  if (dbInstance) return dbInstance
-  const dbPath = join(app.getPath('userData'), 'navi.db')
-  // 旧 schema 用 TEXT 存时间，新 schema 用 INTEGER 存 epoch ms。
-  // 检测到旧 schema 时直接删库重建（开发阶段数据可丢弃）。
-  ensureFreshSchema(dbPath)
-  const sqlite = new Database(dbPath)
-  sqlite.pragma('journal_mode = WAL')
-  sqlite.pragma('foreign_keys = ON')
-  initSchema(sqlite)
-  dbInstance = drizzle(sqlite, { schema })
-  return dbInstance
+static DB: OnceCell<Db> = OnceCell::new();
+
+pub fn get_db() -> &'static Db {
+    DB.get_or_init(|| {
+        let db_path = crate::paths::db_path();
+        if let Some(parent) = db_path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        ensure_fresh_schema(&db_path);
+        let conn = Connection::open(&db_path).expect("open navi.db");
+        let _ = conn.pragma_update(None, "journal_mode", "WAL");
+        let _ = conn.pragma_update(None, "foreign_keys", "ON");
+        init_schema(&conn);
+        Db(Mutex::new(conn))
+    })
 }
 
-/** 检测旧 schema（started_at 是 TEXT）；如果是就删掉整个 db 文件让它重建 */
-function ensureFreshSchema(dbPath: string): void {
-  if (!fs.existsSync(dbPath)) return
-  let raw: Database.Database
-  try {
-    raw = new Database(dbPath, { readonly: true })
-  } catch {
-    return
-  }
-  try {
-    const row = raw.prepare("PRAGMA table_info(sessions)").all() as Array<{ name: string; type: string }>
-    const startedAtCol = row.find((c) => c.name === 'started_at')
-    if (startedAtCol && startedAtCol.type.toUpperCase() === 'TEXT') {
-      raw.close()
-      try { console.log('[navi] 检测到旧 schema (TEXT timestamps)，删库重建为 epoch ms (INTEGER)') } catch { /* EPIPE */ }
-      try {
-        fs.unlinkSync(dbPath)
-        fs.unlinkSync(dbPath + '-wal')
-      } catch {
-        // ignore
-      }
-      try {
-        fs.unlinkSync(dbPath + '-shm')
-      } catch {
-        // ignore
-      }
-      return
+/// 检测旧 schema（started_at 是 TEXT）；如果是就删掉整个 db 文件让它重建
+fn ensure_fresh_schema(db_path: &PathBuf) {
+    if !db_path.exists() {
+        return;
     }
-  } finally {
-    try {
-      raw.close()
-    } catch {
-      // already closed
+    let Ok(raw) = Connection::open_with_flags(db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY) else {
+        return;
+    };
+    let result: Vec<(String, String)> = {
+        let mut stmt = match raw.prepare("PRAGMA table_info(sessions)") {
+            Ok(s) => s,
+            Err(_) => {
+                // 表不存在：全新库，直接走初始化
+                return;
+            }
+        };
+        let rows = stmt.query_map([], |row| Ok((row.get::<_, String>(1)?, row.get::<_, String>(2)?)));
+        match rows {
+            Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
+            Err(_) => Vec::new(),
+        }
+    };
+    {
+        let cols = &result;
+        if let Some((_, ty)) = cols.iter().find(|(name, _)| name == "started_at") {
+            if ty.to_uppercase() == "TEXT" {
+                println!("[navi] 检测到旧 schema (TEXT timestamps)，删库重建为 epoch ms (INTEGER)");
+                let _ = std::fs::remove_file(db_path);
+                let _ = std::fs::remove_file(format!("{}-wal", db_path.to_string_lossy()));
+                let _ = std::fs::remove_file(format!("{}-shm", db_path.to_string_lossy()));
+                let _ = raw.close();
+                return;
+            }
+        }
     }
-  }
+    let _ = raw.close();
 }
 
-function initSchema(sqlite: Database.Database): void {
-  sqlite.exec(`
+fn init_schema(sqlite: &Connection) {
+    sqlite
+        .execute_batch(
+            r#"
     CREATE TABLE IF NOT EXISTS sessions (
       file_path TEXT PRIMARY KEY,
       session_id TEXT NOT NULL,
@@ -249,13 +254,22 @@ function initSchema(sqlite: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_habit_event_hour ON habit_events(hour_start);
     CREATE INDEX IF NOT EXISTS idx_person_mentions ON persons(mention_count);
     CREATE INDEX IF NOT EXISTS idx_chat_created ON chat_messages(created_at);
-  `)
-  // 增量迁移：旧 db 缺列就 ALTER ADD（diaries 新增的 done/ongoing/decisions/todo）
-  const diariesCols = sqlite.prepare("PRAGMA table_info(diaries)").all() as Array<{ name: string }>
-  const have = new Set(diariesCols.map((c) => c.name))
-  for (const col of ['done', 'ongoing', 'decisions', 'todo']) {
-    if (!have.has(col)) {
-      sqlite.exec(`ALTER TABLE diaries ADD COLUMN ${col} TEXT NOT NULL DEFAULT ''`)
+    "#,
+        )
+        .expect("init schema");
+    // 增量迁移：旧 db 缺列就 ALTER ADD（diaries 新增的 done/ongoing/decisions/todo）
+    let cols: Vec<String> = {
+        let mut stmt = sqlite.prepare("PRAGMA table_info(diaries)").unwrap();
+        let rows = stmt
+            .query_map([], |row| row.get::<_, String>(1))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+        rows
+    };
+    for col in ["done", "ongoing", "decisions", "todo"] {
+        if !cols.iter().any(|c| c == col) {
+            let _ = sqlite.execute(&format!("ALTER TABLE diaries ADD COLUMN {} TEXT NOT NULL DEFAULT ''", col), []);
+        }
     }
-  }
 }

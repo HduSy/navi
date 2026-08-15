@@ -1,4 +1,6 @@
-# Navi Schema
+//! 对应 main/navi-schema.ts：wiki 根的 navi.md 模板（原样平移）
+
+pub const NAVI_SCHEMA_MD: &str = r#"# Navi Schema
 
 > 这个文件告诉 Navi（以及它内部的分析大脑）如何组织 wiki、执行工作流、维护认知一致性。
 > 你和 Navi 共同演化它。
@@ -59,3 +61,4 @@ Navi 能：
 Navi 不能：
 - 碰用户的文件、执行编程任务
 - 操作外部系统（除未来通过 MCP 显式授权）
+"#;

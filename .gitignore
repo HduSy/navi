@@ -39,3 +39,6 @@ Thumbs.db
 # Wiki 数据（运行时生成，不提交；保留目录占位）
 wiki/
 !wiki/.gitkeep
+
+# Rust 构建产物
+apps/desktop/src-tauri/target/

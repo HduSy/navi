@@ -16,7 +16,9 @@ export function fromLocalDateStr(date: string): number {
   return new Date(y, m - 1, d, 0, 0, 0, 0).getTime()
 }
 
-/** 窗口拖动：用于非交互区域的根容器，使该区可拖动窗口 */
+/** 窗口拖动：用于非交互区域的根容器，使该区可拖动窗口。
+ *  Tauri/WKWebView 下用 data-tauri-drag-region（事件目标级生效）；
+ *  保留 WebkitAppRegion 样式属性以兼容其余 webview。 */
 export function DragRegion({
   children,
   className = '',
@@ -29,6 +31,7 @@ export function DragRegion({
   return (
     <div
       className={className}
+      data-tauri-drag-region
       style={{ WebkitAppRegion: 'drag', ...style } as React.CSSProperties}
     >
       {children}
