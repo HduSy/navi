@@ -71,8 +71,14 @@ function useAccentFromRoute(): AccentPage {
 function Clock(): React.ReactElement {
   const [now, setNow] = useState(() => formatClock(Date.now()))
   useEffect(() => {
-    const id = setInterval(() => setNow(formatClock(Date.now())), 30000)
-    return () => clearInterval(id)
+    // 对齐到下一分钟边界再刷新：固定 30s 间隔会让分钟切换后最长滞后约 30s
+    let timerId: ReturnType<typeof setTimeout>
+    const tick = (): void => {
+      setNow(formatClock(Date.now()))
+      timerId = setTimeout(tick, 60_000 - (Date.now() % 60_000))
+    }
+    tick()
+    return () => clearTimeout(timerId)
   }, [])
   return <span>{now}</span>
 }
