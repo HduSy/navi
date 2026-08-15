@@ -1,4 +1,5 @@
 import fs from 'node:fs'
+import { join } from 'node:path'
 import {
   listSessionFiles,
   parseSessionFileResult,
@@ -34,7 +35,7 @@ export interface IngestResult {
   durationMs: number
 }
 
-export function ingestAllSessions(): IngestResult {
+export async function ingestAllSessions(): Promise<IngestResult> {
   const startTs = Date.now()
   const db = getDb()
   const files = listSessionFiles()
@@ -42,7 +43,15 @@ export function ingestAllSessions(): IngestResult {
   let skipped = 0
   let failed = 0
 
+  // 每处理 25 个文件让一次事件循环：避免大扫描把主进程 IPC 卡出整段无响应
+  const yieldToEventLoop = (): Promise<void> => new Promise((resolve) => setImmediate(resolve))
+  let sinceYield = 0
+
   for (const file of files) {
+    if (++sinceYield >= 25) {
+      sinceYield = 0
+      await yieldToEventLoop()
+    }
     const existing = db
       .select({ fileSize: sessions.fileSizeBytes })
       .from(sessions)
@@ -135,9 +144,13 @@ function deriveProjects(): void {
     map.set(r.path, cur)
   }
   const now = Date.now()
+  const keepPaths = new Set<string>()
   for (const [projPath, info] of map) {
     const rawName = basename(projPath)
     if (looksLikeUUID(rawName)) continue
+    // 只收真实 git 仓库（项目目录下有 .git，含 worktree 的 .git 文件）
+    if (!fs.existsSync(join(projPath, '.git'))) continue
+    keepPaths.add(projPath)
     const name = rawName
     const wikiPath = `wiki/project/${slugify(name)}.md`
     db.insert(projects)
@@ -162,6 +175,15 @@ function deriveProjects(): void {
         }
       })
       .run()
+  }
+  // 同步清理：删除不再满足规则的旧项目行（UUID 名 / 非 git 仓库 / 路径已删）
+  const stalePaths = db
+    .select({ path: projects.path })
+    .from(projects)
+    .all()
+    .filter((r) => !keepPaths.has(r.path))
+  for (const p of stalePaths) {
+    db.delete(projects).where(eq(projects.path, p.path)).run()
   }
 }
 

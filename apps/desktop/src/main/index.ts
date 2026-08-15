@@ -189,9 +189,14 @@ ipcMain.handle('navi:getExperiences', () =>
 )
 ipcMain.handle('navi:generateExperiences', (_e, filePath: string) => generateExperiencesForSession(filePath))
 
-// 项目
+// 项目：只展示真实 git 仓库（项目目录下有 .git，含 worktree 的 .git 文件）
 ipcMain.handle('navi:getProjects', () =>
-  getDb().select().from(projects).orderBy(desc(projects.lastActiveAt)).all()
+  getDb()
+    .select()
+    .from(projects)
+    .orderBy(desc(projects.lastActiveAt))
+    .all()
+    .filter((p) => fs.existsSync(join(p.path, '.git')))
 )
 
 // 技能
@@ -270,15 +275,33 @@ ipcMain.handle('navi:getCognitionSyncStatus', () => getCognitionSyncStatus())
 /* ───────────── 启动 ───────────── */
 
 void app.whenReady().then(() => {
+  // 窗口先行：下面这些初始化任务都是同步重活，别让用户对着 Dock 图标等
+  createWindow()
+  // dev 模式下主动设置 Dock 图标（macOS 打包后由 .icns 接管，无需此调用）
+  if (process.platform === 'darwin' && !app.isPackaged) {
+    const dockIcon = join(__dirname, '../../resources/icon.png')
+    if (fs.existsSync(dockIcon)) app.dock?.setIcon(dockIcon)
+  }
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+  })
+
   getDb()
   getWiki()
-  const result = ingestAllSessions()
-  safeLog(
-    `[navi] initial ingest: scanned=${result.scanned} upserted=${result.upserted} skipped=${result.skipped} failed=${result.failed} in ${result.durationMs}ms`
-  )
+  // 初始 ingest：延后一拍让首屏 IPC 先进来（内部分片让出事件循环，不会整段阻塞）
+  setTimeout(() => {
+    void ingestAllSessions()
+      .then((result) =>
+        safeLog(
+          `[navi] initial ingest: scanned=${result.scanned} upserted=${result.upserted} skipped=${result.skipped} failed=${result.failed} in ${result.durationMs}ms`
+        )
+      )
+      .catch((e) => safeLog('[navi] initial ingest failed:', e))
+  }, 200)
   setInterval(() => {
-    const r = ingestAllSessions()
-    if (r.upserted > 0) safeLog(`[navi] scheduled ingest: +${r.upserted} updated`)
+    void ingestAllSessions().then((r) => {
+      if (r.upserted > 0) safeLog(`[navi] scheduled ingest: +${r.upserted} updated`)
+    })
   }, 5 * 60 * 1000)
 
   // 认知同步：分钟级 hash 增量，内容变化才写目标文件
@@ -313,16 +336,6 @@ void app.whenReady().then(() => {
         .catch((e) => safeLog('[navi] timeline v2 regenerate failed (will retry next launch):', e))
     }, 60_000)
   }
-
-  createWindow()
-  // dev 模式下主动设置 Dock 图标（macOS 打包后由 .icns 接管，无需此调用）
-  if (process.platform === 'darwin' && !app.isPackaged) {
-    const dockIcon = join(__dirname, '../../resources/icon.png')
-    if (fs.existsSync(dockIcon)) app.dock?.setIcon(dockIcon)
-  }
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
-  })
 })
 
 app.on('window-all-closed', () => {
