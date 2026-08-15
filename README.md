@@ -16,7 +16,7 @@
 
 ## TL;DR
 
-Navi 是一个本地优先的桌面 AI 伙伴（Electron + React + SQLite）。它默默观察你和 Claude Code（及更多本地工具）的每一次协作，长出人格、技能、经验、项目认知和社交关系；核心是把这些认知作为一份**全局记忆**，分钟级同步给你在用的每一个 AI 工具——换工具不换记忆。除此之外，也能聊天、自我调校、回看自己一段时间的工作轨迹。
+Navi 是一个本地优先的桌面 AI 伙伴（Tauri + React + SQLite）。它默默观察你和 Claude Code（及更多本地工具）的每一次协作，长出人格、技能、经验、项目认知和社交关系；核心是把这些认知作为一份**全局记忆**，分钟级同步给你在用的每一个 AI 工具——换工具不换记忆。除此之外，也能聊天、自我调校、回看自己一段时间的工作轨迹。
 
 - **记忆共享**：人格 / 项目 / 技能 / 经验 / 关系 + 最近记忆要点，分钟级同步到 Claude Code、Codex、OpenCode、Qoder、Kimi Code、ZCode、Trae、Gemini CLI、Cursor、Cline 的全局上下文，标记块写入不覆盖手写内容；还可经 MCP 直连认知库
 - **时间线**：每小时自动总结你「做成了什么」，采集中 → 分析中 → 结果三态可视，跨天自动回填近 7 天缺档
@@ -159,12 +159,11 @@ Navi 的 LLM 用途分三个 scope，各自独立配置：
 ```
 navi/
 ├─ apps/
-│  └─ desktop/                 # Electron + Vite + React 19
-│     ├─ src/main/             # 主进程：IPC、调度、ingest、对话、人格、认知同步
-│     ├─ src/preload/          # contextBridge：把 navi API 安全暴露给 renderer
+│  └─ desktop/                 # Tauri + Vite + React 19
+│     ├─ src-tauri/            # Rust 主进程：IPC、调度、ingest、对话、人格、认知同步
 │     └─ src/renderer/         # 渲染层：9 个页面
 └─ packages/
-   ├─ core/                    # 零 Electron 依赖：schema、采集器、wiki 文件系统、Claude 配置
+   ├─ core/                    # 平台无关：schema、采集器、wiki 文件系统、Claude 配置
    ├─ brain/                   # 模型供应商抽象：双协议 + 连通性测试 + 模型拉取
    ├─ scheduler/               # 定时任务引擎
    └─ navi-knowledge/          # 认知库 MCP server：任意工具直查 / 直写 Navi 记忆
@@ -199,7 +198,7 @@ Claude Code session (.jsonl)            Raw Sources（不可变）
 pnpm install                 # 首次安装
 pnpm dev                     # 启动 desktop 开发模式
 pnpm typecheck               # 全仓 typecheck
-pnpm build                   # 构建产物到 apps/desktop/out
+pnpm build                   # 打包 macOS 应用（tauri build）
 ```
 
 ### 配置大脑（模型供应商）
@@ -217,8 +216,8 @@ node scripts/capture-screenshots.mjs      # 需先 pnpm dev（CDP 驱动自动�
 ## 打包 & 发版
 
 ```bash
-cd apps/desktop && pnpm dist              # 本地打包：产出 dist/Navi-*.dmg 与 mac-arm64/Navi.app
-git tag v0.1.0 && git push origin v0.1.0  # 触发 GitHub Actions 自动构建并发 GitHub Release
+pnpm build                                  # tauri build：产物在 apps/desktop/src-tauri/target/release/bundle/
+git tag v0.1.0 && git push origin v0.1.0     # 触发 GitHub Actions 自动构建并发 GitHub Release
 ```
 
 CI（typecheck + build）与发版（tag 触发）见 [.github/workflows](.github/workflows)，
