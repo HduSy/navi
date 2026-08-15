@@ -1,0 +1,43 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Navi",
+  "version": "0.3.0",
+  "identifier": "com.hbusy.navi",
+  "build": {
+    "beforeDevCommand": "pnpm dev:vite",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "pnpm build:vite",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Navi",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 1100,
+        "minHeight": 700,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "acceptFirstMouse": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "app",
+      "dmg"
+    ],
+    "icon": [
+      "icons/icon.icns",
+      "icons/icon.png"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "10.15"
+    }
+  }
+}
