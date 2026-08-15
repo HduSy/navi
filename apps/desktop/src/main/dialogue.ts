@@ -96,7 +96,9 @@ export async function sendMessage(userMessage: string, onDelta?: (text: string) 
 
   let reply: string
   try {
-    const result = await chatStream(dialogueBrain, messages, { maxTokens: 1024 }, onDelta ?? (() => {}))
+    // glm-5.3 等推理模型的 thinking 不接受 disabled、且计入 max_tokens：
+    // 预算必须覆盖「思考 + 正文」（1024 会被思考吃光导致正文为空）
+    const result = await chatStream(dialogueBrain, messages, { maxTokens: 4096 }, onDelta ?? (() => {}))
     reply = result.content.trim() || '（我没生成出回复，请重试）'
   } catch (e) {
     reply = `对话大脑调用失败：${e instanceof Error ? e.message : String(e)}`

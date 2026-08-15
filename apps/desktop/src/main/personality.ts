@@ -163,7 +163,8 @@ export async function routeAdjustIntent(message: string): Promise<{ recognized: 
   }
   const state = getPersonality()
   const ctx = `当前维度: ${JSON.stringify(state.dimensions)}\n本体: ${state.coreFreeText}\n用户消息: ${message}`
-  const res = await chat(brain, [sys, { role: 'user', content: ctx }], { json: true, maxTokens: 256 })
+  // 推理模型 thinking 计入 max_tokens 且无法禁用，256 会被思考吃光、JSON 为空
+  const res = await chat(brain, [sys, { role: 'user', content: ctx }], { json: true, maxTokens: 2048 })
   let parsed: { adjust?: boolean; dims?: Partial<PersonalityDimensions>; roleText?: string }
   try {
     parsed = JSON.parse(res.content)
