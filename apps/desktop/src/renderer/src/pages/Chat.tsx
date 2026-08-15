@@ -1,12 +1,12 @@
 import { useEffect, useState, useRef } from 'react'
 import type { ChatMessageRow, SessionStats } from '../types'
-import { Button, Label, formatClock, formatTime, basename, NoDrag, DragRegion } from '../components'
+import { Button, Label, formatClock, formatTime, basename, NoDrag, DragRegion, useScrollRestore } from '../components'
 import { setChatPhase } from '../face-state'
 
 type DisplayMessage = ChatMessageRow
 
-// 切 tab 离开后回到 Chat 时，恢复上次的滚动位置
-const SCROLL_KEY = 'navi:chat:scrollTop'
+// 切 tab 离开后回到 Chat 时，恢复上次的滚动位置（/clear 时清除）
+const SCROLL_KEY = 'navi:scroll:chat'
 
 // 空状态（首次进入 / /clear 后）的开场气泡建议
 const SUGGESTIONS = ['最近在忙啥？', '踩过什么坑？', '幽默点', '今天适合摸鱼吗？']
@@ -19,7 +19,8 @@ export function Chat() {
   // 当前这轮发送的流式文本（接收侧思考/输出状态），reqId 归属
   const [streamText, setStreamText] = useState('')
   const reqIdRef = useRef('')
-  const scrollRef = useRef<HTMLDivElement>(null)
+  // ready 等消息加载完再贴底：避免首次进入时空内容先贴底、消息到达后不再跟随
+  const scrollRef = useScrollRestore(SCROLL_KEY, 'bottom', messages.length > 0)
 
   // 流式增量：订阅主进程推送，仅接受当前这轮发送的增量
   useEffect(() => {
@@ -37,25 +38,6 @@ export function Chat() {
 
   useEffect(() => {
     void refresh()
-  }, [])
-
-  // 首次渲染消息后：如果是切 tab 回来（sessionStorage 有位置），恢复位置；
-  // 如果是首次进入（无位置），滚到底部。
-  useEffect(() => {
-    if (!scrollRef.current || messages.length === 0) return
-    const saved = sessionStorage.getItem(SCROLL_KEY)
-    if (saved !== null) {
-      scrollRef.current.scrollTop = Number(saved)
-    } else {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-    }
-  }, [messages])
-
-  // 离开页面时保存滚动位置
-  useEffect(() => {
-    return () => {
-      if (scrollRef.current) sessionStorage.setItem(SCROLL_KEY, String(scrollRef.current.scrollTop))
-    }
   }, [])
 
   // 流式输出时贴底跟随（仅当已接近底部，避免打断用户回看历史）

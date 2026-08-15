@@ -1,4 +1,4 @@
-import { useAsync, Empty, Label, FitText, formatTime, looksLikeUUID, NoDrag } from '../components'
+import { useAsync, Empty, Label, FitText, formatTime, looksLikeUUID, NoDrag, useScrollRestore } from '../components'
 import { useState, useMemo } from 'react'
 import type { ProjectRow } from '../types'
 
@@ -42,6 +42,7 @@ function formatDuration(ms: number): string {
 
 export function Projects() {
   const { data, loading } = useAsync(() => window.navi.getProjects())
+  const scrollRef = useScrollRestore('navi:scroll:projects')
   const [sortBy, setSortBy] = useState<SortKey>('latest')
   const allItems = useMemo(() => (data ?? []).filter((p) => !looksLikeUUID(p.name)), [data])
   const items = useMemo(() => sortProjects(allItems, sortBy), [allItems, sortBy])
@@ -67,7 +68,7 @@ export function Projects() {
           ))}
         </NoDrag>
       )}
-      <div className="flex-1 overflow-auto px-7 py-[22px]">
+      <div ref={scrollRef} className="flex-1 overflow-auto px-7 py-[22px]">
         {loading ? (
           <p className="text-stone-400">加载中...</p>
         ) : items.length === 0 ? (

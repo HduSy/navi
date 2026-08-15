@@ -1,4 +1,4 @@
-import { useAsync, Tag, Button, Label, formatTime, TextInput, SecretInput, NoDrag, Select } from '../components'
+import { useAsync, Tag, Button, Label, formatTime, TextInput, SecretInput, NoDrag, Select, useScrollRestore } from '../components'
 import { useState, useEffect, useRef } from 'react'
 import type { BrainProviderConfig, BrainTestResult, BrainTestErrorCode, ProviderPreset, WireProtocol } from '../types'
 
@@ -28,77 +28,87 @@ const TEST_ERROR_LABEL: Record<BrainTestErrorCode, string> = {
 
 export function Brain() {
   const { data: all, reload } = useAsync(() => window.navi.getAllBrain())
+  const scrollRef = useScrollRestore('navi:scroll:brain')
   const { data: status } = useAsync(() => window.navi.getClaudeConfigStatus())
   const { data: secretOk } = useAsync(() => window.navi.getSecretProtectionStatus())
+  const { data: syncStatus, reload: reloadSync } = useAsync(() => window.navi.getCognitionSyncStatus())
   const [editing, setEditing] = useState<Scope | null>(null)
+
+  // 全部数据都到了才渲染内容：首帧就是完整内容 + 记忆位置，避免先画占位内容
+  // 在错误滚动位置、再跳回记忆位置的闪烁。data 不清空，后台 reload 不会闪。
+  // 认知同步状态也提升到这里：它内部异步到达会改变页面高度，若在子组件里加载，
+  // 内容变高时不会触发本页 re-render，滚动恢复会卡在中间位置。
+  const ready = all !== null && status !== null && secretOk !== null && syncStatus !== null
 
   return (
     <div className="h-full flex flex-col">
-      <div className="flex-1 overflow-auto px-7 py-[22px]">
-        <div className="w-full">
-          {/* Claude settings.json 状态（只读 fallback 来源） */}
-          <section className="border border-stone-300 rounded p-4 bg-cream-200 mb-5">
-            <div className="flex items-baseline justify-between mb-3.5">
-              <h3 className="text-[13px] font-semibold text-stone-400 uppercase tracking-[0.04em]">Claude 配置（默认来源）</h3>
-              <span className="mono text-[11px] text-stone-400">
-                apiKey 加密保护 {secretOk ? '✓' : '✗'}
-              </span>
-            </div>
-            <dl className="grid mono text-[13px] leading-[1.6]" style={{ gridTemplateColumns: '96px 1fr', gap: '8px 20px' }}>
-              <dt className="text-stone-400">baseUrl</dt>
-              <dd className="text-stone-600 break-all">{status?.baseUrl || '(未配置)'}</dd>
-              <dt className="text-stone-400">默认模型</dt>
-              <dd className="text-stone-600">{status?.model || '(未配置)'}</dd>
-              <dt className="text-stone-400">token</dt>
-              <dd className="text-stone-600">{status?.hasToken ? '已配置' : <span className="text-danger">缺失</span>}</dd>
-              <dt className="text-stone-400">状态</dt>
-              <dd className="text-stone-600">
-                {status?.available ? (
-                  <Tag variant="ok">可用</Tag>
-                ) : (
-                  <span className="text-danger">配置不完整</span>
-                )}
-              </dd>
-            </dl>
-            {!status?.available && (
-              <p className="mt-3.5 text-xs text-stone-500 border-t border-stone-300 pt-3.5 leading-[1.6]">
-                未自定义的 scope 会从这里派生配置。可以点击下方任意大脑卡片自定义，或先用 cc-switch 配置 Claude Code。
-              </p>
-            )}
-          </section>
+      <div ref={scrollRef} className="flex-1 overflow-auto px-7 py-[22px]">
+        {ready && (
+          <div className="w-full">
+            {/* Claude settings.json 状态（只读 fallback 来源） */}
+            <section className="border border-stone-300 rounded p-4 bg-cream-200 mb-5">
+              <div className="flex items-baseline justify-between mb-3.5">
+                <h3 className="text-[13px] font-semibold text-stone-400 uppercase tracking-[0.04em]">Claude 配置（默认来源）</h3>
+                <span className="mono text-[11px] text-stone-400">
+                  apiKey 加密保护 {secretOk ? '✓' : '✗'}
+                </span>
+              </div>
+              <dl className="grid mono text-[13px] leading-[1.6]" style={{ gridTemplateColumns: '96px 1fr', gap: '8px 20px' }}>
+                <dt className="text-stone-400">baseUrl</dt>
+                <dd className="text-stone-600 break-all">{status?.baseUrl || '(未配置)'}</dd>
+                <dt className="text-stone-400">默认模型</dt>
+                <dd className="text-stone-600">{status?.model || '(未配置)'}</dd>
+                <dt className="text-stone-400">token</dt>
+                <dd className="text-stone-600">{status?.hasToken ? '已配置' : <span className="text-danger">缺失</span>}</dd>
+                <dt className="text-stone-400">状态</dt>
+                <dd className="text-stone-600">
+                  {status?.available ? (
+                    <Tag variant="ok">可用</Tag>
+                  ) : (
+                    <span className="text-danger">配置不完整</span>
+                  )}
+                </dd>
+              </dl>
+              {!status?.available && (
+                <p className="mt-3.5 text-xs text-stone-500 border-t border-stone-300 pt-3.5 leading-[1.6]">
+                  未自定义的 scope 会从这里派生配置。可以点击下方任意大脑卡片自定义，或先用 cc-switch 配置 Claude Code。
+                </p>
+              )}
+            </section>
+  
+            {/* 三 scope 卡片：点击进入编辑 */}
+            {SCOPES.map((s) => {
+              const cfg = all?.[s.key]
+              return (
+                <article
+                  key={s.key}
+                  onClick={() => setEditing(s.key)}
+                  className="border border-stone-300 rounded p-4 bg-cream-200 mb-3 card-hover cursor-pointer"
+                >
+                  <header className="flex items-baseline justify-between mb-1">
+                    <h4 className="text-[15px] font-semibold text-stone-700">{s.label}</h4>
+                    <span className="mono text-[11px] text-stone-400">{s.key} · 点击配置 →</span>
+                  </header>
+                  <p className="text-[12.5px] text-stone-500 mb-3.5">{s.desc}</p>
+                  <div className="grid mono text-[13px] leading-[1.5]" style={{ gridTemplateColumns: '96px 1fr', gap: '8px 20px' }}>
+                    <span className="text-stone-400">协议</span>
+                    <span className="text-stone-600">{cfg?.protocol ?? (cfg?.baseUrl && /\/anthropic/i.test(cfg.baseUrl) ? 'anthropic' : 'openai')}</span>
+                    <span className="text-stone-400">模型</span>
+                    <span className="text-stone-600">{cfg?.model || '(空)'}</span>
+                    <span className="text-stone-400">baseUrl</span>
+                    <span className="text-stone-600 break-all">{cfg?.baseUrl || '(空)'}</span>
+                  </div>
+                </article>
+              )
+            })}
+  
+            <p className="text-[12px] text-stone-500 leading-[1.6] mt-4 max-w-[64ch]">
+              点击大脑卡片可自定义配置（协议 / baseUrl / apiKey / 模型），覆盖默认的 Claude Code 设置。apiKey 走系统钥匙串加密存储，不通文本文件。
+            </p>
 
-          {/* 三 scope 卡片：点击进入编辑 */}
-          {SCOPES.map((s) => {
-            const cfg = all?.[s.key]
-            return (
-              <article
-                key={s.key}
-                onClick={() => setEditing(s.key)}
-                className="border border-stone-300 rounded p-4 bg-cream-200 mb-3 card-hover cursor-pointer"
-              >
-                <header className="flex items-baseline justify-between mb-1">
-                  <h4 className="text-[15px] font-semibold text-stone-700">{s.label}</h4>
-                  <span className="mono text-[11px] text-stone-400">{s.key} · 点击配置 →</span>
-                </header>
-                <p className="text-[12.5px] text-stone-500 mb-3.5">{s.desc}</p>
-                <div className="grid mono text-[13px] leading-[1.5]" style={{ gridTemplateColumns: '96px 1fr', gap: '8px 20px' }}>
-                  <span className="text-stone-400">协议</span>
-                  <span className="text-stone-600">{cfg?.protocol ?? (cfg?.baseUrl && /\/anthropic/i.test(cfg.baseUrl) ? 'anthropic' : 'openai')}</span>
-                  <span className="text-stone-400">模型</span>
-                  <span className="text-stone-600">{cfg?.model || '(空)'}</span>
-                  <span className="text-stone-400">baseUrl</span>
-                  <span className="text-stone-600 break-all">{cfg?.baseUrl || '(空)'}</span>
-                </div>
-              </article>
-            )
-          })}
-
-          <p className="text-[12px] text-stone-500 leading-[1.6] mt-4 max-w-[64ch]">
-            点击大脑卡片可自定义配置（协议 / baseUrl / apiKey / 模型），覆盖默认的 Claude Code 设置。apiKey 走系统钥匙串加密存储，不通文本文件。
-          </p>
-
-          <CognitionSyncPanel />
+          <CognitionSyncPanel data={syncStatus} reload={reloadSync} />
         </div>
+        )}
       </div>
 
       {editing && (
@@ -416,9 +426,16 @@ function BrainConfigSheet({
 
 /* ───────────── 认知同步面板（保持不变） ───────────── */
 
-/** 认知同步管理：把人格/项目/技能/记忆/关系导出到各 AI 工具全局上下文 */
-function CognitionSyncPanel() {
-  const { data, reload } = useAsync(() => window.navi.getCognitionSyncStatus())
+/** 认知同步管理：把人格/项目/技能/记忆/关系导出到各 AI 工具全局上下文。
+ *  状态数据由 Brain 提升进来（data/reload），保证数据到达会触发整页 re-render，
+ *  滚动恢复才能等到内容变高后继续补足到记忆位置。 */
+function CognitionSyncPanel({
+  data,
+  reload
+}: {
+  data: Awaited<ReturnType<typeof window.navi.getCognitionSyncStatus>> | null
+  reload: () => void
+}) {
   const [syncing, setSyncing] = useState(false)
   const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
 

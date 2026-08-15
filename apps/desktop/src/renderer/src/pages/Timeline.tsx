@@ -1,9 +1,10 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { useAsync, Empty, NoDrag, formatTime, formatHourLocal, toLocalDateStr } from '../components'
+import { useAsync, Empty, NoDrag, formatTime, formatHourLocal, toLocalDateStr, useScrollRestore } from '../components'
 import type { TimelineEntryRow } from '../types'
 
 export function Timeline() {
   const [now, setNow] = useState(() => Date.now())
+  const scrollRef = useScrollRestore('navi:scroll:timeline')
   // today 跟随 now，跨天时自动更新
   const today = useMemo(() => toLocalDateStr(now), [now])
   const [date, setDate] = useState(today)
@@ -125,7 +126,7 @@ export function Timeline() {
         </div>
       </NoDrag>
 
-      <div className="flex-1 overflow-auto px-7 py-[22px]">
+      <div ref={scrollRef} className="flex-1 overflow-auto px-7 py-[22px]">
         {/* 已有数据时静默重拉（60s 占位刷新），不闪加载态 */}
         {loading && !data ? (
           <p className="text-stone-400">加载中...</p>

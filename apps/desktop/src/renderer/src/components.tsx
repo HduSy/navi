@@ -177,6 +177,136 @@ export function Label({ children }: { children: React.ReactNode }) {
   )
 }
 
+/** 阅读正文渲染（日记定下的规范）：bullet 用 ·（stone-400）、段落 14.5px/1.75，
+ *  行内 wikilink/加粗/代码沿用 accent 色系。日记、经验等文字篇幅页统一使用。 */
+export function ReadingBody({ body }: { body: string }) {
+  const lines = body.split('\n')
+  const blocks: React.ReactNode[] = []
+  let bullets: string[] = []
+  function flush(): void {
+    if (bullets.length === 0) return
+    blocks.push(
+      <ul key={`ul-${blocks.length}`} className="space-y-1.5">
+        {bullets.map((l, i) => (
+          <li key={i} className="text-[14.5px] leading-[1.7] text-stone-600 flex gap-2">
+            <span className="text-stone-400 mt-[2px] shrink-0">·</span>
+            <span>{renderInline(l.replace(/^[-*]\s+/, ''))}</span>
+          </li>
+        ))}
+      </ul>
+    )
+    bullets = []
+  }
+  for (const line of lines) {
+    if (/^[-*]\s+/.test(line)) bullets.push(line)
+    else {
+      flush()
+      if (line.trim()) {
+        blocks.push(
+          <p key={`p-${blocks.length}`} className="text-[14.5px] leading-[1.75] text-stone-600 whitespace-pre-wrap">
+            {renderInline(line)}
+          </p>
+        )
+      }
+    }
+  }
+  flush()
+  return <div className="space-y-2">{blocks}</div>
+}
+
+/** 切 tab / 视图滚动位置记忆：ref 挂到滚动容器，离开时保存、回来时恢复。
+ *  数据异步加载的页面会在内容撑起高度后的渲染里完成恢复；
+ *  initial：无存档时的初始位置（聊天页 bottom，其余默认 top）；
+ *  ready：数据就绪标志（聊天页要等消息加载完再贴底），默认 true。
+ *  保存发生在「元素被真正移除」时（卸载/被替换，而非普通 re-render），
+ *  因此经验/日记等列表↔详情互切、以及整个页面切走，都能各自记住位置。
+ *
+ *  位置读取时机是刻意设计的：
+ *  - Chromium 里元素被移出文档后 scrollTop 会归零，所以保存必须用「移除前」
+ *    捕获的值：scroll 事件实时记 + 每个 commit 的 layout 清理/挂载时再刷一次
+ *    （兜底程序化 scrollTop，如聊天流式贴底不产生 scroll 事件）；
+ *  - 组件整体卸载时 layout 清理先于子节点移除（ref 仍指向已挂载元素），
+ *    能取到真实 scrollTop；列表↔详情互切时子节点先被移除（ref 已为 null），
+ *    此时跳过刷新、直接用 scroll 事件积累的 posRef。 */
+export function useScrollRestore<T extends HTMLElement = HTMLDivElement>(
+  key: string,
+  initial: 'top' | 'bottom' = 'top',
+  ready = true
+) {
+  const ref = useRef<T>(null)
+  const restoredRef = useRef(false)
+  const posRef = useRef<number | null>(null)
+  const lastSetRef = useRef<number | null>(null)
+
+  // 恢复：不设 deps，每次渲染都尝试，直到内容高度足够、真正恢复成功为止。
+  // 用 useLayoutEffect：在绘制前把 scrollTop 摆好，避免「先看到开头再跳过去」的闪烁。
+  // - 内容没撑起（maxScroll<=0，占位/空态）时不动作，等后续渲染；
+  // - 能精确够到 target（±1px）才算「已恢复」并停止重试；
+  // - 暂时只够到 min(target, maxScroll) 时先夹到那里继续等，后续渲染撑高后再
+  //   补足到 target（脑页等占位内容先矮后高的场景）；内容收缩场景则由 scroll
+  //   事件里的「用户接管」检测终止重试。
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el || restoredRef.current || !ready) return
+    const saved = sessionStorage.getItem(key)
+    if (saved === null) {
+      if (initial === 'bottom') el.scrollTop = el.scrollHeight
+      restoredRef.current = true
+      posRef.current = el.scrollTop
+      return
+    }
+    const target = Number(saved)
+    const maxScroll = el.scrollHeight - el.clientHeight
+    if (maxScroll <= 0) return
+    const want = Math.min(target, maxScroll)
+    el.scrollTop = want
+    lastSetRef.current = want
+    posRef.current = want
+    if (want >= target - 1) restoredRef.current = true
+  })
+
+  // 每个 commit 前后刷新 posRef：此时元素一定还挂在文档里（scrollTop 有效）
+  useLayoutEffect(() => {
+    const refresh = (): void => {
+      if (ref.current) posRef.current = ref.current.scrollTop
+    }
+    refresh()
+    return refresh
+  })
+
+  // scroll 事件实时记录 + 元素卸载/替换时保存。
+  // 保存时机在 passive cleanup：此时 ref 已被 detach（ref.current !== el 成立），
+  // 元素已移除，所以保存的是 posRef 而不是 el.scrollTop。
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const onScroll = (): void => {
+      const st = el.scrollTop
+      posRef.current = st
+      // 位置与最后一次程序化设置明显不符 → 用户接管，停止后续重试
+      if (lastSetRef.current !== null && Math.abs(st - lastSetRef.current) > 2) {
+        restoredRef.current = true
+        lastSetRef.current = null
+      }
+    }
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      el.removeEventListener('scroll', onScroll)
+      if (ref.current !== el) {
+        // 只有恢复过的会话才保存，避免加载失败时把好位置覆盖成 0
+        if (restoredRef.current && posRef.current !== null) {
+          sessionStorage.setItem(key, String(posRef.current))
+        }
+        restoredRef.current = false
+        posRef.current = null
+        lastSetRef.current = null
+      }
+    }
+  })
+
+  return ref
+}
+
 /** 小标签：用于元信息（来源、计数等） */
 export function Tag({
   children,

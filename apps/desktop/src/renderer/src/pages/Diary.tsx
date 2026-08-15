@@ -1,16 +1,32 @@
 import { useState, useEffect } from 'react'
-import { useAsync, Button, Empty, Label, formatTime, toLocalDateStr } from '../components'
+import { useAsync, Button, Empty, Label, formatTime, toLocalDateStr, useScrollRestore, ReadingBody } from '../components'
 import type { DiaryRow } from '../types'
+
+/** 切 tab 前后记住选中的日记日期 */
+const SELECT_KEY = 'navi:diary:selected'
 
 export function Diary() {
   const { data, loading, reload } = useAsync(() => window.navi.getDiaries())
   const diaries = data ?? []
-  const [selectedDate, setSelectedDate] = useState<number | null>(null)
+  const [selectedDate, setSelectedDate] = useState<number | null>(() => {
+    const raw = sessionStorage.getItem(SELECT_KEY)
+    const n = raw === null ? Number.NaN : Number(raw)
+    return Number.isFinite(n) && n > 0 ? n : null
+  })
+  const listRef = useScrollRestore<HTMLUListElement>('navi:scroll:diary:list')
+  const detailRef = useScrollRestore('navi:scroll:diary:detail')
 
-  // 列表加载完默认选中最新一篇
+  // 列表加载完：优先保持存档的选中篇；无存档或该篇已不存在时选最新一篇
   useEffect(() => {
-    if (diaries.length > 0 && !selectedDate) setSelectedDate(diaries[0]!.date)
+    if (diaries.length === 0) return
+    if (selectedDate !== null && diaries.some((d) => d.date === selectedDate)) return
+    setSelectedDate(diaries[0]!.date)
   }, [diaries, selectedDate])
+
+  // 记住选中篇，切 tab 回来还看同一篇
+  useEffect(() => {
+    if (selectedDate !== null) sessionStorage.setItem(SELECT_KEY, String(selectedDate))
+  }, [selectedDate])
 
   const selected = diaries.find((d) => d.date === selectedDate) ?? null
 
@@ -37,7 +53,7 @@ export function Diary() {
                   现在就写
                 </Button>
               </div>
-              <ul className="flex-1 overflow-auto p-3 space-y-0.5">
+              <ul ref={listRef} className="flex-1 overflow-auto p-3 space-y-0.5">
                 {diaries.map((d) => {
                   const active = d.date === selectedDate
                   return (
@@ -62,7 +78,7 @@ export function Diary() {
               </ul>
             </nav>
 
-            <div className="overflow-auto">
+            <div ref={detailRef} className="overflow-auto">
               {selected ? <DiaryDetail diary={selected} /> : <Empty text="选一篇看看吧" />}
             </div>
           </>
@@ -119,7 +135,7 @@ function DiaryDetail({ diary }: { diary: DiaryRow }) {
   )
 }
 
-/** 一段日记 section：title + 多行 bullet / 段落 */
+/** 一段日记 section：title（tone 着色）+ 阅读正文（规范渲染 ReadingBody） */
 function DiarySection({
   title,
   body,
@@ -129,9 +145,6 @@ function DiarySection({
   body: string
   tone?: 'default' | 'accent' | 'ok'
 }) {
-  // 如果每行都以 - 开头，当作 bullet 列表渲染；否则当段落
-  const lines = body.split('\n').map((l) => l.trim()).filter(Boolean)
-  const isBullets = lines.length > 0 && lines.every((l) => /^[-*]\s+/.test(l))
   const titleColor =
     tone === 'ok' ? 'var(--ok)' : tone === 'accent' ? 'var(--accent)' : 'var(--muted)'
   return (
@@ -142,21 +155,7 @@ function DiarySection({
       >
         {title}
       </div>
-      {isBullets ? (
-        <ul className="space-y-1.5">
-          {lines.map((l, i) => (
-            <li
-              key={i}
-              className="text-[14.5px] leading-[1.7] text-stone-600 flex gap-2"
-            >
-              <span className="text-stone-400 mt-[2px] shrink-0">·</span>
-              <span>{l.replace(/^[-*]\s+/, '')}</span>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="text-stone-600 leading-[1.75] text-[14.5px] whitespace-pre-wrap">{body}</p>
-      )}
+      <ReadingBody body={body} />
     </section>
   )
 }

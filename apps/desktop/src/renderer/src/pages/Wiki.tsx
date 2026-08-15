@@ -1,18 +1,43 @@
-import { useAsync, Button, Empty, Label, Markdown, Tag, formatTime, basename, NoDrag } from '../components'
-import { useState } from 'react'
+import { useAsync, Button, Empty, Label, Markdown, Tag, formatTime, basename, NoDrag, useScrollRestore, ReadingBody } from '../components'
+import { useState, useEffect } from 'react'
 import type { WikiPage } from '../types'
 
 /** 经验页只展示 experience 类型（其他类型在导航里有独立页面） */
 const TYPE = 'experience'
 
+/** 列表分页：首屏只渲染一批，接近底部/点按钮再加载更多。
+ *  536 张卡片一次性渲染首屏要 ~180ms（空白感来源），分批后首屏 ~30ms。 */
+const PAGE_SIZE = 60
+
 export function Wiki() {
   const { data, loading, reload } = useAsync(() => window.navi.listWiki(TYPE), [TYPE])
+  const listRef = useScrollRestore('navi:scroll:wiki:list')
+  const detailRef = useScrollRestore('navi:scroll:wiki:detail')
   const [selected, setSelected] = useState<WikiPage | null>(null)
   const [detailText, setDetailText] = useState('')
   const [editing, setEditing] = useState(false)
   const [editText, setEditText] = useState('')
   const [backlinks, setBacklinks] = useState<WikiPage[]>([])
+  const [visible, setVisible] = useState(PAGE_SIZE)
   const pages = data ?? []
+  const shown = pages.slice(0, visible)
+  const hasMore = visible < pages.length
+
+  function loadMore(): void {
+    setVisible((v) => Math.min(pages.length, v + PAGE_SIZE))
+  }
+
+  // 滚动接近底部时自动加载下一批。
+  // 切回 tab 恢复记忆位置时也会触发：恢复逻辑逐批撑高内容，直到记忆位置可达。
+  useEffect(() => {
+    const root = listRef.current
+    if (!root || !hasMore) return
+    const onScroll = (): void => {
+      if (root.scrollHeight - root.scrollTop - root.clientHeight < 600) loadMore()
+    }
+    root.addEventListener('scroll', onScroll, { passive: true })
+    return () => root.removeEventListener('scroll', onScroll)
+  }, [listRef, pages.length, hasMore])
 
   async function openPage(p: WikiPage): Promise<void> {
     const rel = p.path.replace(/^.*\/wiki\//, '')
@@ -44,28 +69,48 @@ export function Wiki() {
     <div className="h-full flex flex-col">
       {!selected ? (
         <>
-          <div className="shrink-0 flex items-center gap-3 px-7 pt-3 pb-2 border-b border-stone-300">
-            <span className="mono text-[11px] text-stone-400">踩过的坑，Navi 都帮你记着</span>
+          <div className="shrink-0 flex items-center gap-2.5 px-7 pt-3 pb-2 border-b border-stone-300">
+            <span className="flex items-center gap-1.5 mono text-[11px] text-stone-400">
+              <span>踩过的坑，Navi 都帮你记着</span>
+              {pages.length > 0 && (
+                <>
+                  <span className="text-stone-500 font-bold select-none leading-none">•</span>
+                  <span>共 {pages.length} 条经验</span>
+                </>
+              )}
+            </span>
             <NoDrag className="ml-auto shrink-0">
               <Button variant="outlined" size="sm" onClick={() => window.navi.rebuildIndex().then(() => reload())}>
                 重新整理
               </Button>
             </NoDrag>
           </div>
-          <div className="flex-1 overflow-auto px-7 py-5">
-            {loading ? (
-              <p className="text-stone-400">加载中...</p>
-            ) : pages.length === 0 ? (
+          <div ref={listRef} className="flex-1 overflow-auto px-7 py-5">
+            {/* 数据未到时留白（不闪加载文案）；从未有过经验才显示空态 */}
+            {!loading && pages.length === 0 ? (
               <Empty text="还没踩过什么坑，多干点活，Navi 会把经验记下来" />
             ) : (
-              <div
-                className="grid gap-3 w-full"
-                style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}
-              >
-                {pages.map((p) => (
-                  <CardItem key={p.path} page={p} onOpen={() => openPage(p)} />
-                ))}
-              </div>
+              <>
+                <div
+                  className="grid gap-3 w-full"
+                  style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}
+                >
+                  {shown.map((p) => (
+                    <CardItem key={p.path} page={p} onOpen={() => openPage(p)} />
+                  ))}
+                </div>
+                {/* 底部：滚动接近时自动加载；也可手动点（总数已在顶部展示） */}
+                {pages.length > 0 && hasMore && (
+                  <div className="mt-5 mb-2 flex items-center justify-center">
+                    <button
+                      onClick={loadMore}
+                      className="text-xs font-medium px-3 py-1.5 rounded-sm border border-stone-300 bg-cream-200 text-stone-500 hover:bg-cream-50 hover:text-stone-600 transition-colors"
+                    >
+                      加载更多（已显示 {visible} / {pages.length}）
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </>
@@ -76,6 +121,7 @@ export function Wiki() {
           editing={editing}
           editText={editText}
           backlinks={backlinks}
+          scrollRef={detailRef}
           onBack={closeDetail}
           onEdit={() => {
             setEditText(detailText)
@@ -128,6 +174,7 @@ function Detail({
   editing,
   editText,
   backlinks,
+  scrollRef,
   onBack,
   onEdit,
   onCancelEdit,
@@ -139,6 +186,7 @@ function Detail({
   editing: boolean
   editText: string
   backlinks: WikiPage[]
+  scrollRef: React.RefObject<HTMLDivElement | null>
   onBack: () => void
   onEdit: () => void
   onCancelEdit: () => void
@@ -167,7 +215,7 @@ function Detail({
           )}
         </NoDrag>
       </div>
-      <div className="flex-1 overflow-auto px-9 py-7">
+      <div ref={scrollRef} className="flex-1 overflow-auto px-9 py-7">
         <div className="max-w-3xl">
           {editing ? (
             <textarea
@@ -236,7 +284,8 @@ function sectionOf(md: string, name: string): string {
   return buf ? buf.join('\n').trim() : ''
 }
 
-/** 经验详情正文：按「背景 / 教训 / 来源」三段拆开渲染；旧格式（无分段）退化为整篇 markdown */
+/** 经验详情正文：按「背景 / 教训 / 来源」三段拆开，小节标题与正文沿用日记的
+ *  阅读规范（13px semibold 标题着 accent 色 + ReadingBody）；旧格式退化整篇 markdown */
 function ExperienceBody({ text }: { text: string }) {
   const bg = sectionOf(text, '背景')
   const lesson = sectionOf(text, '教训')
@@ -248,15 +297,18 @@ function ExperienceBody({ text }: { text: string }) {
     { label: '来源', body: src }
   ]
   return (
-    <div className="space-y-7">
+    <div>
       {sections
         .filter((s) => s.body)
         .map((s) => (
-          <section key={s.label}>
-            <Label>{s.label}</Label>
-            <div className="mt-2.5">
-              <Markdown source={s.body} />
+          <section key={s.label} className="mb-5">
+            <div
+              className="text-[13px] font-semibold mt-[22px] mb-2.5 tracking-[0.02em]"
+              style={{ color: 'var(--accent)' }}
+            >
+              {s.label}
             </div>
+            <ReadingBody body={s.body} />
           </section>
         ))}
     </div>

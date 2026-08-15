@@ -1,11 +1,12 @@
 import { useState, useMemo } from 'react'
-import { useAsync, Empty, formatTime } from '../components'
+import { useAsync, Empty, formatTime, useScrollRestore } from '../components'
 import type { SkillRow } from '../types'
 
 type SortBy = 'count' | 'latest'
 
 export function Skills() {
   const { data, loading } = useAsync(() => window.navi.getSkills())
+  const scrollRef = useScrollRestore('navi:scroll:skills')
   const [toggles, setToggles] = useState<Record<string, boolean>>({})
   const [sortBy, setSortBy] = useState<SortBy>('latest')
   const [filter, setFilter] = useState<'skill' | 'mcp'>('skill')
@@ -87,7 +88,7 @@ export function Skills() {
           </button>
         </div>
       )}
-      <div className="flex-1 overflow-auto px-7 py-[22px]">
+      <div ref={scrollRef} className="flex-1 overflow-auto px-7 py-[22px]">
         {loading ? (
           <p className="text-stone-400">加载中...</p>
         ) : used.length === 0 ? (

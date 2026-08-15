@@ -1,4 +1,4 @@
-import { useAsync, Label, useDebouncedCallback } from '../components'
+import { useAsync, Label, useDebouncedCallback, useScrollRestore } from '../components'
 import { useState, useEffect } from 'react'
 import type { PersonalityState } from '../types'
 
@@ -13,6 +13,7 @@ const DIMS: Array<{ key: keyof PersonalityState['dimensions']; label: string; le
 
 export function Personality() {
   const { data, reload } = useAsync(() => window.navi.getPersonality())
+  const scrollRef = useScrollRestore('navi:scroll:personality')
   const [dims, setDims] = useState<PersonalityState['dimensions'] | null>(null)
 
   useEffect(() => {
@@ -23,7 +24,7 @@ export function Personality() {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="flex-1 overflow-auto px-7 py-[22px]">
+      <div ref={scrollRef} className="flex-1 overflow-auto px-7 py-[22px]">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 w-full">
           {/* 维度 */}
           <section className="border border-stone-300 rounded p-4 bg-cream-200">
