@@ -184,10 +184,10 @@ export class Scheduler {
 
     if (pendingHours.size === 0) return
     const sortedHours = [...pendingHours].sort((a, b) => a - b)
-    // 并行生成所有缺失小时（LLM 调用是 I/O 密集型）
-    await Promise.all(
-      sortedHours.map((h) => this.runTask('timeline', () => this.tasks.generateTimelineForHour(h)))
-    )
+    // 串行生成缺失小时：并行打 LLM 会触发供应商限流（429），把对话大脑也拖下水
+    for (const h of sortedHours) {
+      await this.runTask('timeline', () => this.tasks.generateTimelineForHour(h))
+    }
   }
 
   /** 补扫近 N 天历史日的缺失小时（不含今天，今天由 backfillDayTimeline 处理）。

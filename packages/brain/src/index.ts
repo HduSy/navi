@@ -127,6 +127,29 @@ function buildApiUrl(baseUrl: string, tail: string): string {
   return /\/v\d+$/.test(root) ? `${root}${tail}` : `${root}/v1${tail}`
 }
 
+/** 带状态码的 HTTP 错误（chat 的限流重试判断用） */
+interface HttpCallError extends Error {
+  status?: number
+  retryAfterMs?: number
+}
+
+function httpError(prefix: string, status: number, text: string, headers: Headers): HttpCallError {
+  const err = new Error(`${prefix} HTTP ${status}: ${text.slice(0, 500)}`) as HttpCallError
+  err.status = status
+  // Retry-After：秒数或 HTTP 日期，封顶 30s
+  const ra = headers.get('retry-after')
+  if (ra) {
+    const sec = Number(ra)
+    if (Number.isFinite(sec) && sec >= 0) {
+      err.retryAfterMs = Math.min(sec * 1000, 30_000)
+    } else {
+      const date = Date.parse(ra)
+      if (!Number.isNaN(date)) err.retryAfterMs = Math.min(Math.max(date - Date.now(), 0), 30_000)
+    }
+  }
+  return err
+}
+
 /** Anthropic Messages API 调用 */
 async function anthropicChat(
   config: BrainProviderConfig,
@@ -166,7 +189,7 @@ async function anthropicChat(
   })
   if (!res.ok) {
     const text = await res.text().catch(() => '')
-    throw new Error(`anthropic HTTP ${res.status}: ${text.slice(0, 500)}`)
+    throw httpError('anthropic', res.status, text, res.headers)
   }
   const data: any = await res.json()
   // Anthropic 响应：{ content: [{ type: 'text', text: '...' }], usage: { input_tokens, output_tokens } }
@@ -213,7 +236,7 @@ async function openaiChat(
   })
   if (!res.ok) {
     const text = await res.text().catch(() => '')
-    throw new Error(`brain HTTP ${res.status}: ${text.slice(0, 500)}`)
+    throw httpError('brain', res.status, text, res.headers)
   }
   const data: any = await res.json()
   const choice = data?.choices?.[0]
@@ -233,10 +256,22 @@ export async function chat(
   messages: ChatMessage[],
   opts: { maxTokens?: number; json?: boolean } = {}
 ): Promise<ChatResult> {
-  if (isAnthropicProtocol(config)) {
-    return anthropicChat(config, messages, opts)
+  const call = isAnthropicProtocol(config)
+    ? () => anthropicChat(config, messages, opts)
+    : () => openaiChat(config, messages, opts)
+  // 429/529 限流指数退避重试：智谱等供应商瞬时限流（如 1302）很常见，
+  // 对话/分析共用此路径；优先尊重 Retry-After，否则 1s/2s/4s + 抖动，共试 4 次
+  const maxRetries = 3
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await call()
+    } catch (e) {
+      const err = e as HttpCallError
+      if ((err.status !== 429 && err.status !== 529) || attempt >= maxRetries) throw e
+      const backoff = err.retryAfterMs ?? Math.min(1000 * 2 ** attempt + Math.random() * 400, 8000)
+      await new Promise((resolve) => setTimeout(resolve, backoff))
+    }
   }
-  return openaiChat(config, messages, opts)
 }
 
 export async function embed(config: BrainProviderConfig, input: string): Promise<number[]> {
