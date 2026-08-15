@@ -14,6 +14,7 @@ const naviAPI = {
   // 对话
   sendMessage: (msg: string) => ipcRenderer.invoke('navi:sendMessage', msg),
   getRecentMessages: () => ipcRenderer.invoke('navi:getRecentMessages'),
+  clearChat: () => ipcRenderer.invoke('navi:clearChat'),
 
   // 人格
   getPersonality: () => ipcRenderer.invoke('navi:getPersonality'),

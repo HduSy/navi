@@ -200,3 +200,9 @@ export function getRecentMessages(limit = 50): Array<{ id: string; role: string;
   const db = getDb()
   return db.select().from(chatMessages).orderBy(desc(chatMessages.createdAt)).limit(limit).all().reverse()
 }
+
+/** 清空聊天上下文：删除全部 chat_messages（对话大脑的 history 组装从此为空），返回删除条数 */
+export function clearChat(): number {
+  const r = getDb().delete(chatMessages).run()
+  return r.changes
+}

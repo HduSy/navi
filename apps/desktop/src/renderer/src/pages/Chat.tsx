@@ -50,6 +50,28 @@ export function Chat() {
     if (!input.trim() || sending) return
     const text = input.trim()
     setInput('')
+    // /clear：清空聊天上下文（DB 历史 + 界面），不经模型路由
+    if (text === '/clear') {
+      try {
+        await window.navi.clearChat()
+        sessionStorage.removeItem(SCROLL_KEY)
+        setMessages([])
+      } catch (e) {
+        const ts = Date.now()
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `err-${ts}`,
+            role: 'navi',
+            content: `清空失败：${e instanceof Error ? e.message : String(e)}`,
+            routedBrain: 'dialogue',
+            actionTaken: '',
+            createdAt: ts
+          }
+        ])
+      }
+      return
+    }
     setSending(true)
     setChatPhase('thinking')
     const now = Date.now()
@@ -138,7 +160,7 @@ export function Chat() {
                     void send()
                   }
                 }}
-                placeholder={sending ? 'Navi 思考中...' : '和 Navi 说点什么（回车发送）'}
+                placeholder={sending ? 'Navi 思考中...' : '和 Navi 说点什么（/clear 清空上下文）'}
                 disabled={sending}
                 className="flex-1 min-w-0 bg-cream-200 border border-stone-300 rounded px-3 py-2 text-[13.5px] text-stone-700 placeholder-stone-400 focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent-soft transition-colors duration-150 disabled:opacity-50"
               />

@@ -5,7 +5,7 @@ import fs from 'node:fs'
 import { getDb } from './db.js'
 import { getWiki } from './wiki-host.js'
 import { ingestAllSessions, getSessionStats, generateTimelineForHour, generateTimelineForDay, regenerateAllTimeline, generateDiary, generateExperiencesForSession, generatePersonsForSession, getInFlightTimelineHours } from './ingest.js'
-import { sendMessage, getRecentMessages } from './dialogue.js'
+import { sendMessage, getRecentMessages, clearChat } from './dialogue.js'
 import { getPersonality, setPersonalityDimensions, setPersonalityFreeText, type PersonalityDimensions } from './personality.js'
 import { getBrain, getAllBrain, getClaudeConfigStatus, saveBrainConfig, clearBrainConfig, isBrainCustomized, getSecretProtectionStatus } from './brain-host.js'
 import { lintWiki } from './lint.js'
@@ -95,6 +95,7 @@ ipcMain.handle('navi:ingest', () => ingestAllSessions())
 // 对话
 ipcMain.handle('navi:sendMessage', (_e, msg: string) => sendMessage(msg))
 ipcMain.handle('navi:getRecentMessages', () => getRecentMessages(50))
+ipcMain.handle('navi:clearChat', () => clearChat())
 
 // 人格
 ipcMain.handle('navi:getPersonality', () => getPersonality())

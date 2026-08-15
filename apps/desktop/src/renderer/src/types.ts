@@ -213,6 +213,7 @@ export interface NaviAPI {
   ingest: () => Promise<IngestResult>
   sendMessage: (msg: string) => Promise<DialogueResult>
   getRecentMessages: () => Promise<ChatMessageRow[]>
+  clearChat: () => Promise<number>
   getPersonality: () => Promise<PersonalityState>
   setPersonalityDimensions: (dims: Record<string, number>) => Promise<PersonalityState>
   setPersonalityFreeText: (text: string) => Promise<PersonalityState>
