@@ -713,7 +713,7 @@ export function Select({
       {open && (
         <div
           ref={listRef}
-          className="absolute z-50 mt-1 left-0 right-0 max-h-[220px] overflow-auto bg-cream-50 border border-stone-300 rounded shadow-sm"
+          className="absolute z-50 mt-1 left-0 right-0 max-h-[220px] overflow-auto hide-scrollbar bg-cream-50 border border-stone-300 rounded shadow-sm"
         >
           {filtered.length === 0 ? (
             <div className="px-3 py-2 text-xs text-stone-400">{emptyText}</div>
