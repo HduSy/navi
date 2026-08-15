@@ -67,8 +67,8 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     id: 'glm',
     label: '智谱 GLM',
     baseUrl: 'https://open.bigmodel.cn/api/anthropic',
-    defaultModel: 'glm-4.6',
-    models: ['glm-4.6', 'glm-4.5', 'glm-4-plus'],
+    defaultModel: 'glm-5.3',
+    models: ['glm-5.3', 'glm-5.2', 'glm-5.1', 'glm-5', 'glm-4.6', 'glm-4.5'],
     protocol: 'anthropic',
     docsUrl: 'https://open.bigmodel.cn/dev/api'
   },
