@@ -93,7 +93,20 @@ ipcMain.handle('navi:getSessionStats', () => getSessionStats())
 ipcMain.handle('navi:ingest', () => ingestAllSessions())
 
 // 对话
-ipcMain.handle('navi:sendMessage', (_e, msg: string) => sendMessage(msg))
+ipcMain.handle('navi:sendMessage', (e, msg: string, reqId?: string) =>
+  sendMessage(
+    msg,
+    reqId
+      ? (delta) => {
+          try {
+            e.sender.send('navi:chat:delta', { reqId, delta })
+          } catch {
+            // 接收侧窗口已销毁：忽略
+          }
+        }
+      : undefined
+  )
+)
 ipcMain.handle('navi:getRecentMessages', () => getRecentMessages(50))
 ipcMain.handle('navi:clearChat', () => clearChat())
 

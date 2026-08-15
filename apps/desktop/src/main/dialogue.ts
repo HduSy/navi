@@ -5,7 +5,7 @@ import { getDb } from './db.js'
 import { getBrain, getAllBrain } from './brain-host.js'
 import { getPersonality, routeAdjustIntent } from './personality.js'
 import { getWiki } from './wiki-host.js'
-import { chat, type ChatMessage as BrainChatMessage } from '@navi/brain'
+import { chat, chatStream, type ChatMessage as BrainChatMessage } from '@navi/brain'
 import { randomUUID } from 'node:crypto'
 
 export interface DialogueResult {
@@ -16,7 +16,8 @@ export interface DialogueResult {
   error?: string
 }
 
-export async function sendMessage(userMessage: string): Promise<DialogueResult> {
+/** onDelta：对话大脑流式增量回调（渲染层实时渲染用），行动路由/分析路径无流式 */
+export async function sendMessage(userMessage: string, onDelta?: (text: string) => void): Promise<DialogueResult> {
   const db = getDb()
   const wiki = getWiki()
   const now = Date.now()
@@ -95,7 +96,7 @@ export async function sendMessage(userMessage: string): Promise<DialogueResult> 
 
   let reply: string
   try {
-    const result = await chat(dialogueBrain, messages, { maxTokens: 1024 })
+    const result = await chatStream(dialogueBrain, messages, { maxTokens: 1024 }, onDelta ?? (() => {}))
     reply = result.content.trim() || '（我没生成出回复，请重试）'
   } catch (e) {
     reply = `对话大脑调用失败：${e instanceof Error ? e.message : String(e)}`

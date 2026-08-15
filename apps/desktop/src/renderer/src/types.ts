@@ -211,7 +211,8 @@ export interface NaviAPI {
   electron: string
   getSessionStats: () => Promise<SessionStats>
   ingest: () => Promise<IngestResult>
-  sendMessage: (msg: string) => Promise<DialogueResult>
+  sendMessage: (msg: string, reqId?: string) => Promise<DialogueResult>
+  onChatDelta: (cb: (payload: { reqId: string; delta: string }) => void) => () => void
   getRecentMessages: () => Promise<ChatMessageRow[]>
   clearChat: () => Promise<number>
   getPersonality: () => Promise<PersonalityState>

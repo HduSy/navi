@@ -3,9 +3,7 @@ import type { ChatMessageRow, SessionStats } from '../types'
 import { Button, Label, formatClock, formatTime, basename, NoDrag, DragRegion } from '../components'
 import { setChatPhase } from '../face-state'
 
-interface DisplayMessage extends ChatMessageRow {
-  pending?: boolean
-}
+type DisplayMessage = ChatMessageRow
 
 // 切 tab 离开后回到 Chat 时，恢复上次的滚动位置
 const SCROLL_KEY = 'navi:chat:scrollTop'
@@ -18,7 +16,18 @@ export function Chat() {
   const [messages, setMessages] = useState<DisplayMessage[]>([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
+  // 当前这轮发送的流式文本（接收侧思考/输出状态），reqId 归属
+  const [streamText, setStreamText] = useState('')
+  const reqIdRef = useRef('')
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  // 流式增量：订阅主进程推送，仅接受当前这轮发送的增量
+  useEffect(() => {
+    return window.navi.onChatDelta((p) => {
+      if (p.reqId !== reqIdRef.current) return
+      setStreamText((prev) => prev + p.delta)
+    })
+  }, [])
 
   async function refresh(): Promise<void> {
     const [s, msgs] = await Promise.all([window.navi.getSessionStats(), window.navi.getRecentMessages()])
@@ -48,6 +57,13 @@ export function Chat() {
       if (scrollRef.current) sessionStorage.setItem(SCROLL_KEY, String(scrollRef.current.scrollTop))
     }
   }, [])
+
+  // 流式输出时贴底跟随（仅当已接近底部，避免打断用户回看历史）
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el || !sending) return
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 80) el.scrollTop = el.scrollHeight
+  }, [streamText, sending])
 
   // preset：气泡建议直接传入发送（绕过 input state，同步可用）
   async function send(preset?: string): Promise<void> {
@@ -79,8 +95,12 @@ export function Chat() {
     }
     setSending(true)
     setChatPhase('thinking')
+    setStreamText('')
+    const reqId = `chat-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    reqIdRef.current = reqId
     const now = Date.now()
     const tempId = `pending-${now}`
+    // 乐观插入用户消息：发送本身是瞬时的，直接以已发送形态展示
     setMessages((prev) => [
       ...prev,
       {
@@ -89,13 +109,13 @@ export function Chat() {
         content: text,
         routedBrain: 'dialogue',
         actionTaken: '',
-        createdAt: now,
-        pending: true
+        createdAt: now
       }
     ])
     try {
-      const res = await window.navi.sendMessage(text)
+      const res = await window.navi.sendMessage(text, reqId)
       const ts = Date.now()
+      setStreamText('')
       setMessages((prev) => [
         ...prev.filter((m) => m.id !== tempId),
         {
@@ -117,6 +137,7 @@ export function Chat() {
       ])
     } catch (e) {
       const ts = Date.now()
+      setStreamText('')
       setMessages((prev) => [
         ...prev.filter((m) => m.id !== tempId),
         {
@@ -163,7 +184,12 @@ export function Chat() {
                 </div>
               </article>
             ) : (
-              messages.map((m) => <MessageBubble key={m.id} msg={m} />)
+              <>
+                {messages.map((m) => (
+                  <MessageBubble key={m.id} msg={m} />
+                ))}
+                {sending && <ThinkingBubble text={streamText} />}
+              </>
             )}
           </div>
           <DragRegion className="shrink-0 border-t border-stone-300 px-7 py-3">
@@ -260,8 +286,33 @@ function MessageBubble({ msg }: { msg: DisplayMessage }) {
           (isUser ? 'justify-end' : 'justify-start')
         }
       >
-        {msg.pending && <span>发送中...</span>}
-        {!msg.pending && <span>{formatClock(msg.createdAt)}</span>}
+        <span>{formatClock(msg.createdAt)}</span>
+      </div>
+    </article>
+  )
+}
+
+/** 等待/流式中的 Navi 侧气泡：首个增量前弹跳点（思考中），之后流式文本 + 光标 */
+function ThinkingBubble({ text }: { text: string }) {
+  return (
+    <article className="flex flex-col max-w-[72%] mb-4 items-start">
+      <div className="px-[13px] py-2.5 rounded border text-[14px] leading-[1.6] break-words bg-cream-200 border-stone-300 text-stone-700 rounded-tl-sm">
+        {text ? (
+          <p className="whitespace-pre-wrap">
+            {text}
+            <span className="animate-pulse">▍</span>
+          </p>
+        ) : (
+          <span className="inline-flex items-center gap-1 py-[3px]" aria-label="Navi 正在思考">
+            {[0, 150, 300].map((d) => (
+              <span
+                key={d}
+                className="w-[6px] h-[6px] rounded-full bg-stone-400 animate-bounce"
+                style={{ animationDelay: `${d}ms` }}
+              />
+            ))}
+          </span>
+        )}
       </div>
     </article>
   )

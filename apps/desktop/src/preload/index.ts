@@ -12,7 +12,12 @@ const naviAPI = {
   ingest: () => ipcRenderer.invoke('navi:ingest'),
 
   // 对话
-  sendMessage: (msg: string) => ipcRenderer.invoke('navi:sendMessage', msg),
+  sendMessage: (msg: string, reqId?: string) => ipcRenderer.invoke('navi:sendMessage', msg, reqId),
+  onChatDelta: (cb: (payload: { reqId: string; delta: string }) => void) => {
+    const listener = (_e: unknown, payload: { reqId: string; delta: string }): void => cb(payload)
+    ipcRenderer.on('navi:chat:delta', listener)
+    return () => ipcRenderer.removeListener('navi:chat:delta', listener)
+  },
   getRecentMessages: () => ipcRenderer.invoke('navi:getRecentMessages'),
   clearChat: () => ipcRenderer.invoke('navi:clearChat'),
 

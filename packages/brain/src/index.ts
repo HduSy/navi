@@ -150,12 +150,19 @@ function httpError(prefix: string, status: number, text: string, headers: Header
   return err
 }
 
-/** Anthropic Messages API 调用 */
-async function anthropicChat(
+/** 构造好的 API 请求（chat / chatStream 共用） */
+interface ChatRequest {
+  url: string
+  headers: Record<string, string>
+  body: Record<string, unknown>
+}
+
+/** Anthropic Messages API 请求构造 */
+function buildAnthropicRequest(
   config: BrainProviderConfig,
   messages: ChatMessage[],
   opts: { maxTokens?: number; json?: boolean }
-): Promise<ChatResult> {
+): ChatRequest {
   const url = buildApiUrl(config.baseUrl, '/messages')
   // Anthropic 协议：system 单独传，messages 只能有 user/assistant
   const systemMsg = messages.find((m) => m.role === 'system')
@@ -178,15 +185,25 @@ async function anthropicChat(
       body.system = '必须返回合法 JSON，不要包含其他内容。'
     }
   }
-  const res = await fetch(url, {
-    method: 'POST',
+  return {
+    url,
     headers: {
       'Content-Type': 'application/json',
       'x-api-key': config.apiKey,
       'anthropic-version': '2023-06-01'
     },
-    body: JSON.stringify(body)
-  })
+    body
+  }
+}
+
+/** Anthropic Messages API 调用 */
+async function anthropicChat(
+  config: BrainProviderConfig,
+  messages: ChatMessage[],
+  opts: { maxTokens?: number; json?: boolean }
+): Promise<ChatResult> {
+  const req = buildAnthropicRequest(config, messages, opts)
+  const res = await fetch(req.url, { method: 'POST', headers: req.headers, body: JSON.stringify(req.body) })
   if (!res.ok) {
     const text = await res.text().catch(() => '')
     throw httpError('anthropic', res.status, text, res.headers)
@@ -209,12 +226,12 @@ async function anthropicChat(
   }
 }
 
-/** OpenAI 兼容 chat completions 调用 */
-async function openaiChat(
+/** OpenAI 兼容 chat completions 请求构造 */
+function buildOpenaiRequest(
   config: BrainProviderConfig,
   messages: ChatMessage[],
   opts: { maxTokens?: number; json?: boolean }
-): Promise<ChatResult> {
+): ChatRequest {
   const url = buildApiUrl(config.baseUrl, '/chat/completions')
   const body: Record<string, unknown> = {
     model: config.model,
@@ -225,15 +242,25 @@ async function openaiChat(
   if (opts.json) {
     body.response_format = { type: 'json_object' }
   }
-  const res = await fetch(url, {
-    method: 'POST',
+  return {
+    url,
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${config.apiKey}`,
       'api-key': config.apiKey
     },
-    body: JSON.stringify(body)
-  })
+    body
+  }
+}
+
+/** OpenAI 兼容 chat completions 调用 */
+async function openaiChat(
+  config: BrainProviderConfig,
+  messages: ChatMessage[],
+  opts: { maxTokens?: number; json?: boolean }
+): Promise<ChatResult> {
+  const req = buildOpenaiRequest(config, messages, opts)
+  const res = await fetch(req.url, { method: 'POST', headers: req.headers, body: JSON.stringify(req.body) })
   if (!res.ok) {
     const text = await res.text().catch(() => '')
     throw httpError('brain', res.status, text, res.headers)
@@ -271,6 +298,72 @@ export async function chat(
       const backoff = err.retryAfterMs ?? Math.min(1000 * 2 ** attempt + Math.random() * 400, 8000)
       await new Promise((resolve) => setTimeout(resolve, backoff))
     }
+  }
+}
+
+/** 流式对话：SSE 增量通过 onDelta 实时推送，返回聚合全文。
+ *  429/529 与 chat() 同样退避重试——限流失败发生在响应头阶段，不会产生半截增量。 */
+export async function chatStream(
+  config: BrainProviderConfig,
+  messages: ChatMessage[],
+  opts: { maxTokens?: number } = {},
+  onDelta: (text: string) => void
+): Promise<ChatResult> {
+  const isAnthropic = isAnthropicProtocol(config)
+  const build = () =>
+    isAnthropic
+      ? buildAnthropicRequest(config, messages, { maxTokens: opts.maxTokens })
+      : buildOpenaiRequest(config, messages, { maxTokens: opts.maxTokens })
+  const maxRetries = 3
+  for (let attempt = 0; ; attempt++) {
+    const req = build()
+    const res = await fetch(req.url, {
+      method: 'POST',
+      headers: req.headers,
+      body: JSON.stringify({ ...req.body, stream: true })
+    })
+    if (!res.ok || !res.body) {
+      const text = await res.text().catch(() => '')
+      const err = httpError(isAnthropic ? 'anthropic' : 'brain', res.status, text, res.headers)
+      if ((err.status === 429 || err.status === 529) && attempt < maxRetries) {
+        const backoff = err.retryAfterMs ?? Math.min(1000 * 2 ** attempt + Math.random() * 400, 8000)
+        await new Promise((resolve) => setTimeout(resolve, backoff))
+        continue
+      }
+      throw err
+    }
+    // 解析 SSE：按行切 data: 负载；容忍半行（跨 chunk）与无法解析的行
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buf = ''
+    let content = ''
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buf += decoder.decode(value, { stream: true })
+      const lines = buf.split('\n')
+      buf = lines.pop() ?? ''
+      for (const line of lines) {
+        if (!line.startsWith('data:')) continue
+        const payload = line.slice(5).trim()
+        if (!payload || payload === '[DONE]') continue
+        try {
+          const ev = JSON.parse(payload)
+          const delta: unknown = isAnthropic
+            ? ev?.type === 'content_block_delta' && ev?.delta?.type === 'text_delta'
+              ? ev.delta.text
+              : ''
+            : ev?.choices?.[0]?.delta?.content
+          if (typeof delta === 'string' && delta) {
+            content += delta
+            onDelta(delta)
+          }
+        } catch {
+          // 忽略无法解析的行
+        }
+      }
+    }
+    return { content }
   }
 }
 
