@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
   typecheck-build:
-    name: typecheck + build
+    name: typecheck + frontend build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,5 +31,8 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
-      - name: Build
-        run: pnpm build
+      # Tauri 是 macOS 原生 app：Linux runner 上跑 `tauri build` 会缺
+      # libwebkit2gtk 等系统依赖，且 bundle targets（dmg/app）是 macOS 专属。
+      # 这里只验前端（vite build），完整打包由 release.yml 在 macOS 上验。
+      - name: Build frontend
+        run: pnpm --filter @navi/desktop build:vite
