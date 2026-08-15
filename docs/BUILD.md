@@ -47,13 +47,11 @@ pnpm dist        # = tauri build（先跑 beforeBuildCommand: pnpm build:vite，
                  #   再编译 Rust 并打 bundle）
 ```
 
-产物输出到 `apps/desktop/src-tauri/target/release/bundle/macos/`：
+产物输出到 `apps/desktop/src-tauri/target/release/bundle/`：
 
-```
-bundle/macos/
-  Navi.app              # 可直接运行的 .app
-  Navi_<ver>_aarch64.dmg   # 安装镜像（拖入 Applications）
-```
+- **macOS**：`bundle/macos/` → `Navi.app` + `Navi_<ver>_aarch64.dmg`
+- **Windows**：`bundle/nsis/` → `Navi_<ver>_x64-setup.exe`（NSIS 安装包，按用户安装免管理员）
+- **Linux**：`bundle/deb/`、`bundle/appimage/`（未在 CI 构建）
 
 > 注意 `apps/desktop/dist/` 是 Vite 前端构建输出（`tauri.conf.json` 的
 > `frontendDist`），**不是**打包产物。
@@ -65,7 +63,7 @@ bundle/macos/
 | workflow | 触发 | 作用 |
 |---|---|---|
 | `ci.yml` | push 到 main / PR | ubuntu 上跑 `pnpm typecheck` + 前端 `vite build`，防回归 |
-| `release.yml` | 推 `v*` tag（手动 Run workflow 需选 `v*` tag 作 ref） | macOS arm64 runner 打 dmg/app，自动建 GitHub Release |
+| `release.yml` | 推 `v*` tag（手动 Run workflow 需选 `v*` tag 作 ref） | macOS（dmg/app）+ Windows（NSIS exe）并行构建，自动建 GitHub Release |
 
 ### 发版流程
 
@@ -76,8 +74,10 @@ git tag v0.3.1          # 版本号要和 tauri.conf.json 一致
 git push origin v0.3.1
 ```
 
-push 后 `release.yml` 自动构建并创建 GitHub Release，附上 `Navi_<ver>_aarch64.dmg`
-与 `Navi.app`。产物**未签名**（见常见问题 #1），下载安装需手动绕过 Gatekeeper。
+push 后 `release.yml` 在 macOS + Windows 两个 runner 上并行构建，并把产物附到同一个
+GitHub Release：`Navi_<ver>_aarch64.dmg` + `Navi.app`（macOS）、
+`Navi_<ver>_x64-setup.exe`（Windows）。产物**未签名**（见常见问题 #1），
+macOS 下载后需绕过 Gatekeeper，Windows 需绕过 SmartScreen。
 
 > ⚠️ `tauri-action` 创建的 Release 是**草稿（draft）**，不会自动公开。
 > 发布到 Release 页面点一下「Publish release」，或命令行：
@@ -85,24 +85,31 @@ push 后 `release.yml` 自动构建并创建 GitHub Release，附上 `Navi_<ver>
 
 ### 发版 workflow 干了什么
 
-1. `macos-latest`（arm64 runner，Apple Silicon）——与本机架构一致，原生编译
-   `rusqlite`，无需交叉编译
+1. 矩阵 runner：`macos-latest`（arm64，Apple Silicon）+ `windows-latest`（x64），
+   各跑各的原生目标（`aarch64-apple-darwin` / `x86_64-pc-windows-msvc`），
+   原生编译 `rusqlite`，无需交叉编译；`fail-fast: false` 保证一个平台失败不拖累另一个
 2. `pnpm install --frozen-lockfile`（lockfile 已入库）
 3. `swatinem/rust-cache` 缓存 Cargo 构建产物，加速重复构建
 4. `tauri-apps/tauri-action` 执行 `npm run tauri build`（所以
    `apps/desktop/package.json` 必须有 `"tauri": "tauri"` 脚本）+ `GH_TOKEN`
-   自动建 Release 传产物
+   自动建 Release、把两个平台的产物附到同一个 Release
    （Tauri 没有 electron-builder 的 `--publish` 参数，建 Release 交给 tauri-action）
 
 ### 代码签名（可选）
 
-runner 上没有 Developer ID 证书，产物未签名。若想发布签名 + 公证的版本：
+runner 上没有签名证书，产物未签名（macOS + Windows）。若想发布签名版本：
 
+**macOS（签名 + 公证）**
 1. 申请 Apple Developer 账号 + `Developer ID Application` 证书
 2. 把证书安装到 runner 的 keychain，或在 repo Secrets 配
    `APPLE_SIGNING_IDENTITY` / `APPLE_CERTIFICATE` / `APPLE_CERTIFICATE_PASSWORD`
-3. tauri-action 会自动签名
-4. 需要公证再配 `APPLE_ID` / `APPLE_APP_SPECIFIC_PASSWORD` / `APPLE_TEAM_ID`
+3. 需要公证再配 `APPLE_ID` / `APPLE_APP_SPECIFIC_PASSWORD` / `APPLE_TEAM_ID`
+
+**Windows（Authenticode 签名，消 SmartScreen 警告）**
+1. 申请 Authenticode 代码签名证书，导出为 `.pfx`
+2. 在 repo Secrets 配 `WINDOWS_CERTIFICATE`（base64）与 `WINDOWS_CERTIFICATE_PASSWORD`
+
+配置后 tauri-action 会自动签名。
 
 ## 常见问题
 
