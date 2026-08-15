@@ -224,7 +224,6 @@ export interface NaviAPI {
   getProviderPresets: () => Promise<ProviderPreset[]>
   getClaudeConfigStatus: () => Promise<{ available: boolean; baseUrl: string; model: string; hasToken: boolean }>
   isBrainCustomized: (scope: string) => Promise<boolean>
-  getSecretProtectionStatus: () => Promise<boolean>
   saveBrain: (scope: string, cfg: BrainProviderConfig) => Promise<BrainProviderConfig>
   clearBrain: (scope: string) => Promise<BrainProviderConfig>
   testBrain: (cfg: BrainProviderConfig) => Promise<BrainTestResult>

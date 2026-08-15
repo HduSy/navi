@@ -33,7 +33,6 @@ export function Brain() {
   const { data: all, reload } = useAsync(() => window.navi.getAllBrain())
   const scrollRef = useScrollRestore('navi:scroll:brain')
   const { data: status } = useAsync(() => window.navi.getClaudeConfigStatus())
-  const { data: secretOk } = useAsync(() => window.navi.getSecretProtectionStatus())
   const { data: syncStatus, reload: reloadSync } = useAsync(() => window.navi.getCognitionSyncStatus())
   const [editing, setEditing] = useState<Scope | null>(null)
 
@@ -41,7 +40,7 @@ export function Brain() {
   // 在错误滚动位置、再跳回记忆位置的闪烁。data 不清空，后台 reload 不会闪。
   // 认知同步状态也提升到这里：它内部异步到达会改变页面高度，若在子组件里加载，
   // 内容变高时不会触发本页 re-render，滚动恢复会卡在中间位置。
-  const ready = all !== null && status !== null && secretOk !== null && syncStatus !== null
+  const ready = all !== null && status !== null && syncStatus !== null
 
   return (
     <div className="h-full flex flex-col">
@@ -52,9 +51,6 @@ export function Brain() {
             <section className="border border-stone-300 rounded p-4 bg-cream-200 mb-5">
               <div className="flex items-baseline justify-between mb-3.5">
                 <h3 className="text-[13px] font-semibold text-stone-400 uppercase tracking-[0.04em]">Claude 配置（默认来源）</h3>
-                <span className="mono text-[11px] text-stone-400">
-                  apiKey 加密保护 {secretOk ? '✓' : '✗'}
-                </span>
               </div>
               <dl className="grid mono text-[13px] leading-[1.6]" style={{ gridTemplateColumns: '96px 1fr', gap: '8px 20px' }}>
                 <dt className="text-stone-400">baseUrl</dt>

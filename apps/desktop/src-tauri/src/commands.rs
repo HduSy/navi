@@ -142,11 +142,6 @@ pub fn is_brain_customized(scope: String) -> bool {
 }
 
 #[tauri::command(async)]
-pub fn get_secret_protection_status() -> bool {
-    crate::secret::is_secret_protection_available()
-}
-
-#[tauri::command(async)]
 pub fn save_brain(scope: String, cfg: crate::brain::BrainProviderConfig) -> crate::brain::BrainProviderConfig {
     crate::brain_host::save_brain_config(&scope, &cfg);
     crate::brain_host::get_brain(&scope)

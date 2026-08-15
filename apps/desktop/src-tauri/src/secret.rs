@@ -1,70 +1,33 @@
-//! 对应 main/secret.ts：系统钥匙串加密敏感字符串（如 apiKey）
+//! 敏感字符串（如 apiKey）的存储标记。
 //!
-//! Electron safeStorage 在 macOS 走 Keychain；这里用 keyring crate 同样走 Keychain。
-//! 旧 Electron 版写入的密文（safeStorage v10 格式）这里解不开：
-//! 与原版「换设备/钥匙串失效 → 返回空串，提示用户重新配置」的行为一致。
+//! Electron 时代用 safeStorage / macOS Keychain；Tauri 迁移后曾沿用 keyring
+//! crate 走 Keychain，但未签名 app 的 ad-hoc 签名每次构建都变，Keychain ACL
+//! 认不出新构建，用户每次升级都要被弹「允许访问钥匙串」——体验太差，砍掉。
+//! 现在直接以 `plain:base64` 标记存进 SQLite（位于用户主目录），与 fallback
+//! 来源 ~/.claude/settings.json 里的明文 token 安全水位一致。
+//!
+//! DB 兼容：旧版写入的 `keychain:<scope>` 标记已无法解密（keyring 依赖已删）
+//! → 返回空串，UI 提示用户重新配置，与原版「换设备/钥匙串失效」行为一致。
 
-const SERVICE: &str = "com.hbusy.navi.brain";
 const PLAIN_PREFIX: &str = "plain:";
 
-fn entry(scope: &str) -> Option<keyring::Entry> {
-    keyring::Entry::new(SERVICE, &format!("api-key-{}", scope)).ok()
-}
-
-/// 加密：明文 → 存入钥匙串，返回标记串（空串原样返回）。
-/// 返回值存入 SQLite 的 api_key 列：
-/// - `keychain:<scope>`：密文在钥匙串里
-/// - `plain:<base64>`：钥匙串不可用时的降级（对齐原版降级行为）
-/// - 空：空
-pub fn encrypt_secret(scope: &str, plain: &str) -> String {
+/// 存储：明文 → `plain:base64` 标记串（空串原样返回），写入 SQLite 的 api_key 列。
+pub fn encrypt_secret(plain: &str) -> String {
     if plain.is_empty() {
         return String::new();
     }
-    if let Some(e) = entry(scope) {
-        if e.set_password(plain).is_ok() {
-            return format!("keychain:{}", scope);
-        }
-    }
-    // 不可用降级：明文 base64，加前缀标记（对齐原版）
     format!("{}{}", PLAIN_PREFIX, base64_encode(plain.as_bytes()))
 }
 
-/// 解密：密文标记 → 明文。空串原样返回；解密失败返回空（调用方提示重新配置）。
-pub fn decrypt_secret(scope: &str, cipher: &str) -> String {
+/// 读取：`plain:` → 明文；`keychain:`（旧版遗留）或无法识别 → 空串（提示重新配置）。
+pub fn decrypt_secret(cipher: &str) -> String {
     if cipher.is_empty() {
-        return String::new();
-    }
-    if let Some(rest) = cipher.strip_prefix("keychain:") {
-        let scope = if rest.is_empty() { scope } else { rest };
-        if let Some(e) = entry(scope) {
-            if let Ok(pw) = e.get_password() {
-                return pw;
-            }
-        }
         return String::new();
     }
     if let Some(rest) = cipher.strip_prefix(PLAIN_PREFIX) {
         return base64_decode(rest);
     }
-    // 旧 Electron safeStorage 密文（base64，无前缀）：无法用钥匙串还原 → 返回空
     String::new()
-}
-
-/// 当前钥匙串是否可用（供 UI 提示）
-pub fn is_secret_protection_available() -> bool {
-    match entry("__probe__") {
-        Some(e) => {
-            // set + delete 一次探测
-            let probe = format!("probe-{}", crate::paths::now_ms());
-            if e.set_password(&probe).is_ok() {
-                let _ = e.delete_credential();
-                true
-            } else {
-                false
-            }
-        }
-        None => false,
-    }
 }
 
 /* 简易 base64（避免额外依赖） */

@@ -55,7 +55,6 @@ function buildNaviApi(): NaviAPI {
     getProviderPresets: () => invoke('get_provider_presets'),
     getClaudeConfigStatus: () => invoke('get_claude_config_status'),
     isBrainCustomized: (scope: string) => invoke('is_brain_customized', { scope }),
-    getSecretProtectionStatus: () => invoke('get_secret_protection_status'),
     saveBrain: (scope: string, cfg: BrainProviderConfig) => invoke('save_brain', { scope, cfg }),
     clearBrain: (scope: string) => invoke('clear_brain', { scope }),
     testBrain: (cfg: BrainProviderConfig) => invoke('test_brain', { cfg }),

@@ -45,7 +45,6 @@ fn main() {
             commands::get_provider_presets,
             commands::get_claude_config_status,
             commands::is_brain_customized,
-            commands::get_secret_protection_status,
             commands::save_brain,
             commands::clear_brain,
             commands::test_brain,

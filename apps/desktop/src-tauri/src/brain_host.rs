@@ -36,7 +36,7 @@ fn from_row(scope: &str, provider: String, model: String, base_url: String, api_
         provider: if provider.is_empty() { "claude".into() } else { provider },
         model,
         base_url,
-        api_key: decrypt_secret(scope, &api_key),
+        api_key: decrypt_secret(&api_key),
         temperature,
         protocol,
     }
@@ -87,9 +87,9 @@ pub fn is_brain_customized(scope: &str) -> bool {
     n > 0
 }
 
-/// 保存 scope 配置（apiKey 走钥匙串）。provider 字段同时承载协议信息。
+/// 保存 scope 配置（apiKey 以 plain:base64 标记存 SQLite）。provider 字段同时承载协议信息。
 pub fn save_brain_config(scope: &str, cfg: &BrainProviderConfig) {
-    let cipher = encrypt_secret(scope, &cfg.api_key);
+    let cipher = encrypt_secret(&cfg.api_key);
     let provider = cfg
         .protocol
         .map(|p| if p == WireProtocol::Anthropic { "anthropic".to_string() } else { "openai".to_string() })
