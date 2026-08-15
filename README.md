@@ -3,27 +3,61 @@
 [![License](https://img.shields.io/badge/license-MIT-black.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-black.svg)](https://github.com/HduSy/navi/pulls)
 
-> Your AI work companion that observes, remembers, and grows with you.
+> Your AI work companion that observes, remembers, and grows with you — and shares that memory with every AI tool you use.
 
 ## 愿景
 
 你和 AI 一起干了很多活，但这些经历默认散落在 jsonl 里，没有谁帮你记住。Navi 想补上这一块：
 
+- **一份记忆，处处可用**——Navi 长出的认知（人格 / 项目 / 技能 / 经验 / 关系）分钟级同步到你所有 AI 工具的全局上下文（Claude Code、Codex、Cursor、Gemini CLI、Kimi Code……），换工具不换记忆；配 MCP 后还能让任意工具直接查询这份认知库
 - **协作经历值得自动沉淀**——做成了什么、踩过什么坑、和谁打过交道，应当自己长成记忆，而不是每次从零开始
+- **伙伴不是镜像，是陪伴**——Navi 有自己的脾气和成长轨迹，你对它的调教它都记得；它对你的了解，通过认知同步回流给你在用的每一个 AI 工具
 - **记忆只属于你**——本地优先，所有数据留在你自己的磁盘上，不上云、不外发
-- **伙伴不是镜像，是陪伴**——Navi 有自己的脾气和成长轨迹，你对它的调教它都记得；而它对你的了解，最终通过认知同步回流给你在用的每一个 AI 工具
 
 ## TL;DR
 
-Navi 是一个本地优先的桌面 AI 伙伴（Electron + React + SQLite）。它默默观察你和 Claude Code（及更多本地工具）的每一次协作，自己长出人格、技能、经验、项目认知和社交关系——能聊天、能自我调校、也能回看你自己一段时间的工作轨迹。
+Navi 是一个本地优先的桌面 AI 伙伴（Electron + React + SQLite）。它默默观察你和 Claude Code（及更多本地工具）的每一次协作，长出人格、技能、经验、项目认知和社交关系；核心是把这些认知作为一份**全局记忆**，分钟级同步给你在用的每一个 AI 工具——换工具不换记忆。除此之外，也能聊天、自我调校、回看自己一段时间的工作轨迹。
 
+- **记忆共享**：人格 / 项目 / 技能 / 经验 / 关系 + 最近记忆要点，分钟级同步到 Claude Code、Codex、OpenCode、Qoder、Kimi Code、ZCode、Trae、Gemini CLI、Cursor、Cline 的全局上下文，标记块写入不覆盖手写内容；还可经 MCP 直连认知库
 - **时间线**：每小时自动总结你「做成了什么」，采集中 → 分析中 → 结果三态可视，跨天自动回填近 7 天缺档
 - **日记**：每晚 21 点把当天聚合成结构化日报（做了什么 / 进行中 / 关键决策 / 待办）
 - **聊天**：流式逐字渲染 + 思考态指示；有脾气、有记忆，聊天里可直接调教人格，`/clear` 一键清空上下文
 - **经验 / 项目 / 技能 / 人物关系**：全部从会话自动长出，沉淀为可编辑的 markdown wiki
 - **三大脑**：分析 / 对话 / 行动三个 scope 各配各的模型，双协议（Anthropic / OpenAI 兼容），7 家供应商预设，限流自动退避重试
-- **认知同步**：人格 / 项目 / 经验回流到各 AI 工具的全局上下文，分钟级增量
 - **本地优先**：所有数据存在 `userData/navi.db` + `userData/wiki/`，零云端；配过 Claude Code 即零配置可用
+
+## 🌐 记忆共享 —— 一份记忆，处处可用
+
+这是 Navi 最核心的能力：把你和 AI 协作长出的认知，作为一份**全局记忆**自动同步给每一个 AI 工具。在 Claude Code 里踩过的坑，Codex 不会再踩第二次；你对 Navi 人格的调教，在 Cursor 里同样生效。
+
+### 同步到哪里
+
+| 工具 | 全局上下文文件 |
+|---|---|
+| Claude Code | `~/.claude/CLAUDE.md` |
+| Codex | `~/.codex/AGENTS.md` |
+| OpenCode | `~/.config/opencode/AGENTS.md` |
+| Qoder CLI | `~/.qoder/AGENTS.md` |
+| Kimi Code | `~/.kimi/AGENTS.md` |
+| 智谱 ZCode | `~/AGENTS.md` |
+| 字节 Trae | `~/.trae/AGENTS.md` |
+| Gemini CLI | `~/.gemini/GEMINI.md` |
+| Cursor | `~/.cursor/AGENTS.md` |
+| Cline | `~/.clinerules` |
+
+### 同步什么
+
+- **人格**：六个维度数值 + 自由描述 + 协作偏好
+- **近期项目**：活跃项目、会话次数、最近活跃时间
+- **已启用技能**：你常用的 Claude Code skills 与 MCP servers
+- **记忆要点**：最近更新的经验 / 项目 / 人物 / 习惯 / 人格 / 技能摘要
+- **重要人物**：人物与关系网络
+
+### 怎么同步
+
+- **标记块写入**：Navi 的内容包在 `<!-- NAVI-COGNITION:START/END -->` 里，文件里你手写的部分原样保留
+- **hash 增量**：内容变了才写文件；启动后先同步一次，之后每 60 秒检查
+- **MCP 直连**：`navi-knowledge` MCP server 让任意支持 MCP 的工具直接 `search` / `update` 认知库，不只是读静态快照
 
 ## 界面一览
 
@@ -69,7 +103,7 @@ Scheduler 每 5 分钟轮询，把每个已结束小时的你和 Claude Code 的
 
 ![经验](docs/screenshots/experiences.png)
 
-对近 30 分钟新入库的 session 自动抽取「踩坑经验」，沉淀为 markdown wiki 页（可读可编辑），并通过认知同步回流到各 AI 工具的全局上下文——同一个坑不踩第二次。
+对近 30 分钟新入库的 session 自动抽取「踩坑经验」，沉淀为 markdown wiki 页（可读可编辑），并经记忆共享回流到各 AI 工具的全局上下文——同一个坑不踩第二次。
 
 ### 🧠 人格 —— 直接拖动调整 Navi 的脾气
 
@@ -114,7 +148,7 @@ Navi 的 LLM 用途分三个 scope，各自独立配置：
 - **安全存储**：apiKey 走系统钥匙串（safeStorage）加密入库，不落明文
 - **零配置可用**：没配过的 scope 自动从 `~/.claude/settings.json` 派生，配过 Claude Code 开箱即用
 
-另外还有**认知同步**：把人格 / 项目 / 技能 / 经验 / 关系导出到各 AI coding 工具的全局上下文（`~/.claude/CLAUDE.md`、`~/.codex/AGENTS.md` 等），分钟级自动同步，内容变化才写入。
+另外还有**认知同步**：把人格 / 项目 / 技能 / 经验 / 关系导出到 10 个 AI 工具的全局上下文（见上「🌐 记忆共享」），分钟级自动同步，内容变化才写入。
 
 ### 🎭 颜文字状态机（彩蛋）
 
@@ -132,7 +166,8 @@ navi/
 └─ packages/
    ├─ core/                    # 零 Electron 依赖：schema、采集器、wiki 文件系统、Claude 配置
    ├─ brain/                   # 模型供应商抽象：双协议 + 连通性测试 + 模型拉取
-   └─ scheduler/               # 定时任务引擎
+   ├─ scheduler/               # 定时任务引擎
+   └─ navi-knowledge/          # 认知库 MCP server：任意工具直查 / 直写 Navi 记忆
 ```
 
 ## 数据流
