@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Navi",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "identifier": "com.hbusy.navi",
   "build": {
     "beforeDevCommand": "pnpm dev:vite",
