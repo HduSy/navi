@@ -91,7 +91,9 @@ export function Wiki() {
 }
 
 function CardItem({ page, onOpen }: { page: WikiPage; onOpen: () => void }) {
-  const preview = stripMarkdown(page.body).slice(0, 80)
+  // 卡片描述只展示「教训」段（旧格式无分段时退化为整篇纯文本）
+  const lesson = sectionOf(page.body, '教训')
+  const preview = (lesson || stripMarkdown(page.body)).slice(0, 80)
   const sources = page.frontmatter.sourceSessions ?? []
   const refs = page.frontmatter.refs ?? []
   return (
@@ -101,18 +103,20 @@ function CardItem({ page, onOpen }: { page: WikiPage; onOpen: () => void }) {
     >
       <h3 className="mono text-sm font-medium text-stone-700 mb-1.5">{page.frontmatter.title}</h3>
       {preview && <p className="text-[12.5px] leading-[1.55] text-stone-500 line-clamp-3 mb-4 flex-1">{preview}</p>}
-      <div className="space-y-1.5 mono text-[11px] text-stone-400 mt-auto">
-        <div>更新于 {formatTime(page.frontmatter.updatedAt)}</div>
-        {sources.length > 0 && (
-          <div className="flex items-center gap-1 flex-wrap">
-            <span>来自</span>
-            {sources.slice(0, 2).map((s, i) => (
-              <Tag key={i}>{basename(s).slice(0, 8)}</Tag>
-            ))}
-            {sources.length > 2 && <span>等 {sources.length} 个</span>}
-          </div>
-        )}
-        {refs.length > 0 && <div>关联 {refs.length} 处</div>}
+      <div className="mono text-[11px] text-stone-400 mt-auto">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {sources.length > 0 && (
+            <>
+              <span>来自</span>
+              {sources.slice(0, 2).map((s, i) => (
+                <Tag key={i}>{basename(s).slice(0, 8)}</Tag>
+              ))}
+              {sources.length > 2 && <span>等 {sources.length} 个</span>}
+            </>
+          )}
+          {refs.length > 0 && <span>{sources.length > 0 ? '·' : ''} 关联 {refs.length} 处</span>}
+        </div>
+        <div className="text-right mt-1">更新于 {formatTime(page.frontmatter.updatedAt)}</div>
       </div>
     </button>
   )
@@ -176,7 +180,7 @@ function Detail({
               <p className="mono text-[11px] text-stone-400 mb-5">
                 创建 {formatTime(page.frontmatter.createdAt)} · 更新 {formatTime(page.frontmatter.updatedAt)}
               </p>
-              <Markdown source={text} />
+              <ExperienceBody text={text} />
             </>
           )}
 
@@ -215,4 +219,46 @@ function stripMarkdown(md: string): string {
     .replace(/^[-*]\s+/gm, '') // 去列表标记
     .replace(/\n{2,}/g, '\n')
     .trim()
+}
+
+/** 取 markdown 正文中「## 标题」段的纯内容（到下一个 ## 为止），没有该段返回 '' */
+function sectionOf(md: string, name: string): string {
+  const lines = md.split('\n')
+  let buf: string[] | null = null
+  for (const line of lines) {
+    if (/^##\s+/.test(line)) {
+      if (buf !== null) break
+      if (line.replace(/^##\s+/, '').trim() === name) buf = []
+    } else if (buf !== null) {
+      buf.push(line)
+    }
+  }
+  return buf ? buf.join('\n').trim() : ''
+}
+
+/** 经验详情正文：按「背景 / 教训 / 来源」三段拆开渲染；旧格式（无分段）退化为整篇 markdown */
+function ExperienceBody({ text }: { text: string }) {
+  const bg = sectionOf(text, '背景')
+  const lesson = sectionOf(text, '教训')
+  const src = sectionOf(text, '来源')
+  if (!bg && !lesson && !src) return <Markdown source={text} />
+  const sections: Array<{ label: string; body: string }> = [
+    { label: '背景', body: bg },
+    { label: '教训', body: lesson },
+    { label: '来源', body: src }
+  ]
+  return (
+    <div className="space-y-7">
+      {sections
+        .filter((s) => s.body)
+        .map((s) => (
+          <section key={s.label}>
+            <Label>{s.label}</Label>
+            <div className="mt-2.5">
+              <Markdown source={s.body} />
+            </div>
+          </section>
+        ))}
+    </div>
+  )
 }

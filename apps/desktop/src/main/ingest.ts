@@ -18,11 +18,11 @@ import {
   toLocalDateStr,
   fromLocalDateStr
 } from '@navi/core'
-import { eq } from 'drizzle-orm'
+import { eq, gte, asc } from 'drizzle-orm'
 import type { BrainProviderConfig, ChatMessage } from '@navi/brain'
 import { chat, parseJsonResponse } from '@navi/brain'
 import { getDb } from './db.js'
-import { getWiki } from './wiki-host.js'
+import { getWiki, getWikiRoot } from './wiki-host.js'
 import { getBrain } from './brain-host.js'
 
 /* ───────────── 原始 session 入库 ───────────── */
@@ -521,7 +521,7 @@ export async function generateExperiencesForSession(filePath: string): Promise<v
         sourceTimeRange: `${new Date(row.startedAt).toISOString()}/${new Date(row.endedAt).toISOString()}`,
         refs: [slugify(basename(row.projectPath))]
       },
-      `# ${item.scenario}\n\n## 教训\n\n${item.lesson}\n\n## 来源\n\n- 项目：[[${slugify(basename(row.projectPath))}]]\n- 时间：${new Date(row.startedAt).toLocaleString('zh-CN')} ~ ${new Date(row.endedAt).toLocaleString('zh-CN')}\n`
+      `# ${item.scenario}\n\n## 背景\n\n${item.scenario}\n\n## 教训\n\n${item.lesson}\n\n## 来源\n\n- 项目：[[${slugify(basename(row.projectPath))}]]\n- 时间：${new Date(row.startedAt).toLocaleString('zh-CN')} ~ ${new Date(row.endedAt).toLocaleString('zh-CN')}\n- 会话：${basename(filePath)}\n`
     )
     db.insert(experiences)
       .values({
@@ -580,8 +580,13 @@ export async function generatePersonsForSession(filePath: string): Promise<void>
   const sys: ChatMessage = {
     role: 'system',
     content:
-      '从这段对话里抽取提到的人物。返回 JSON 数组，每项 {name, aliases, context}。' +
-      '只抽真实人名（中文姓名/英文姓名），不要抽角色指代（如"老板""前端"）或工具名。没有则返回 []。'
+      '从这段 AI 编程协作对话里抽取「与用户真实交流/合作的人」。返回 JSON 数组，每项 {name, aliases, context}。\n' +
+      '严格规则（宁缺毋滥，拿不准就不收）：\n' +
+      '- 只收真实人类：中文姓名（2-4 个汉字）或英文 First Last 全名，且是用户在对话里实际交流、合作、讨论的对象\n' +
+      '- 不收：AI 模型与助手（Claude/GPT/Navi 等）、公司与产品（Google/OpenAI/React 等）、技术概念与缩写（SEO/API 等）、角色指代（老板/用户/前端）、单个普通英文词（Ready/User 等）\n' +
+      '- 只出现在文件路径、目录名、git 信息、系统环境里的名字不算交流对象\n' +
+      '- 知名人物仅作为项目主题、玩笑或对比对象出现时也不收\n' +
+      '- 没有符合条件的人则返回 []'
   }
   let result
   try {
@@ -601,6 +606,16 @@ export async function generatePersonsForSession(filePath: string): Promise<void>
   } catch {
     return
   }
+  // 硬性兜底：已知的非人物实体（AI/公司/概念词）不依赖模型自觉，代码层直接拦下
+  const NON_PERSON_IDS = new Set([
+    'navi', 'claude', 'google', 'seo', 'user', 'ready', 'ai', 'gpt', 'chatgpt',
+    'openai', 'anthropic', 'gemini', 'copilot', 'cursor', 'react', 'github'
+  ])
+  items = items.filter((x) => {
+    const key = slugify(x.name).toLowerCase()
+    return Boolean(key) && !NON_PERSON_IDS.has(key)
+  })
+  if (items.length === 0) return
   const now = Date.now()
   const mentioned: string[] = []
   for (const item of items) {
@@ -691,6 +706,35 @@ export async function generatePersonsForSession(filePath: string): Promise<void>
           .run()
       }
     }
+  }
+}
+
+/** 重建人物关系图：清空 persons/relationships 与 wiki/person 文件后，
+ *  对近 N 天的 session 串行重跑抽取（用于抽取规则修复后的全量矫正）。
+ *  串行 + 逐个等待，避免触发供应商限流 */
+export async function rebuildPersons(recentDays = 14): Promise<{ sessions: number; persons: number; relationships: number }> {
+  const db = getDb()
+  const cutoff = Date.now() - recentDays * 86_400_000
+  db.delete(relationships).run()
+  db.delete(persons).run()
+  try {
+    fs.rmSync(join(getWikiRoot(), 'person'), { recursive: true, force: true })
+  } catch {
+    // ignore
+  }
+  const rows = db
+    .select({ filePath: sessions.filePath })
+    .from(sessions)
+    .where(gte(sessions.startedAt, cutoff))
+    .orderBy(asc(sessions.startedAt))
+    .all()
+  for (const r of rows) {
+    await generatePersonsForSession(r.filePath)
+  }
+  return {
+    sessions: rows.length,
+    persons: db.select({ id: persons.id }).from(persons).all().length,
+    relationships: db.select({ id: relationships.id }).from(relationships).all().length
   }
 }
 

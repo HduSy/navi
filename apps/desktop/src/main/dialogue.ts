@@ -56,7 +56,7 @@ export async function sendMessage(userMessage: string, onDelta?: (text: string) 
   // 2. 对话大脑：RAG 检索 + 组装 system prompt
   const dialogueBrain = getBrain('dialogue')
   if (!dialogueBrain.apiKey) {
-    const reply = '我还没配置对话大脑的模型 API key。请到「大脑」视图填一下（任意支持 OpenAI 兼容接口的供应商都行），我才能真正开口。'
+    const reply = '我还没配置对话脑子的模型 API key。请到「脑子」视图填一下（任意支持 OpenAI 兼容接口的供应商都行），我才能真正开口。'
     return { reply, routedBrain: 'dialogue', contextUsed: {}, error: 'no_api_key' }
   }
 

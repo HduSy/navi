@@ -52,9 +52,9 @@ const NAV_SECTIONS: Array<{ label: string; items: NavEntry[] }> = [
     ]
   },
   {
-    label: '系统',
+    label: '配置',
     items: [
-      { to: '/brain', label: '大脑', tip: '始终读你的 Claude 配置 · 换号用 cc-switch 改 settings.json 后重启', Icon: IconBrain, accent: 'brain' }
+      { to: '/brain', label: '脑子', tip: '始终读你的 Claude 配置 · 换号用 cc-switch 改 settings.json 后重启', Icon: IconBrain, accent: 'brain' }
     ]
   }
 ]

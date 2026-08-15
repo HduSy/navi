@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 import fs from 'node:fs'
 import { getDb } from './db.js'
 import { getWiki } from './wiki-host.js'
-import { ingestAllSessions, getSessionStats, generateTimelineForHour, generateTimelineForDay, regenerateAllTimeline, generateDiary, generateExperiencesForSession, generatePersonsForSession, getInFlightTimelineHours } from './ingest.js'
+import { ingestAllSessions, getSessionStats, generateTimelineForHour, generateTimelineForDay, regenerateAllTimeline, generateDiary, generateExperiencesForSession, generatePersonsForSession, rebuildPersons, getInFlightTimelineHours } from './ingest.js'
 import { sendMessage, getRecentMessages, clearChat } from './dialogue.js'
 import { getPersonality, setPersonalityDimensions, setPersonalityFreeText, type PersonalityDimensions } from './personality.js'
 import { getBrain, getAllBrain, getClaudeConfigStatus, saveBrainConfig, clearBrainConfig, isBrainCustomized, getSecretProtectionStatus } from './brain-host.js'
@@ -335,6 +335,20 @@ void app.whenReady().then(() => {
         })
         .catch((e) => safeLog('[navi] timeline v2 regenerate failed (will retry next launch):', e))
     }, 60_000)
+  }
+
+  // 一次性重建人物关系图：旧抽取规则把 SEO/Google/Claude 等非人物收了进来。
+  // 延迟 90 秒避开启动高峰（重建对近 14 天 session 串行跑 LLM，需要几分钟）。
+  const personsFlag = join(app.getPath('userData'), '.persons-rebuild-v2-done')
+  if (!fs.existsSync(personsFlag)) {
+    setTimeout(() => {
+      void rebuildPersons(14)
+        .then((r) => {
+          safeLog(`[navi] persons rebuild done: sessions=${r.sessions} persons=${r.persons} relationships=${r.relationships}`)
+          try { fs.writeFileSync(personsFlag, String(Date.now())) } catch { /* ignore */ }
+        })
+        .catch((e) => safeLog('[navi] persons rebuild failed (will retry next launch):', e))
+    }, 90_000)
   }
 })
 

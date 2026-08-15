@@ -34,6 +34,8 @@
     --accent-diary:        oklch(55% 0.18 310);
     --accent-diary-soft:   oklch(93% 0.08 310);
     --accent-diary-line:   oklch(82% 0.10 310);
+    /* 日记列表 hover/选中底色：与 tab 高亮（soft）同色系但更浅一档 */
+    --accent-diary-tint:   oklch(96.5% 0.05 310);
     --accent-projects:     oklch(55% 0.15 200);
     --accent-projects-soft:    oklch(94% 0.06 200);
     --accent-projects-line:    oklch(84% 0.08 200);
@@ -173,6 +175,11 @@
   }
   .ring-accent-soft {
     --tw-ring-color: var(--accent-soft);
+  }
+
+  /* 日记列表 hover/选中底色：diary 域专用，比 accent-soft 更浅 */
+  .bg-diary-tint {
+    background: var(--accent-diary-tint);
   }
 
   /* 卡片 hover：边框转 accent-line */

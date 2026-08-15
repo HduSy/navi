@@ -47,8 +47,8 @@ export function Diary() {
                         className={
                           'w-full text-left px-3 py-2.5 rounded-sm border cursor-pointer transition-colors duration-150 ' +
                           (active
-                            ? 'bg-cream-200 border-stone-300'
-                            : 'border-transparent hover:bg-cream-200')
+                            ? 'bg-diary-tint border-stone-300'
+                            : 'border-transparent hover:bg-diary-tint')
                         }
                       >
                         <div className="mono text-[13px] text-stone-700">{toLocalDateStr(d.date)}</div>

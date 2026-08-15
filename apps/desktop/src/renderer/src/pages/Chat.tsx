@@ -168,7 +168,7 @@ export function Chat() {
                   我已经看到你 <span className="font-semibold text-stone-700">{stats?.totalSessions ?? '...'}</span> 次和 AI 一起干活了。
                   {stats && stats.totalSessions > 0
                     ? '问我「最近在忙啥」「踩过什么坑」，或者说「幽默点」调调我的脾气。'
-                    : '先去「大脑」里让我有个能思考的脑子，我就能开口陪你聊。'}
+                    : '先去「脑子」里让我有个能思考的脑子，我就能开口陪你聊。'}
                 </p>
                 <div className="mt-5 flex flex-wrap gap-2">
                   {SUGGESTIONS.map((s) => (
