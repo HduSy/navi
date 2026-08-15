@@ -78,6 +78,15 @@ xattr -dr com.apple.quarantine "$APP" 2>/dev/null || true
 echo "🚀 正在打开 Navi ..."
 open "$APP"
 
+# 若本脚本位于 DMG 卷内，安装完成后自动弹出该镜像，保持桌面干净
+case "$SCRIPT_DIR" in
+  /Volumes/*)
+    echo "🧹 正在弹出安装镜像 ..."
+    sleep 2
+    hdiutil detach "$SCRIPT_DIR" -quiet 2>/dev/null || true
+    ;;
+esac
+
 echo ""
 echo "🎉 安装完成，Navi 已启动。"
 read -r -p "按回车键退出..." _
