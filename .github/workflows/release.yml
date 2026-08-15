@@ -83,18 +83,20 @@ jobs:
           releaseBody: |
             Navi — your AI work companion that observes, remembers, and grows with you.
 
-            **macOS (Apple Silicon)**: download `Navi_*_aarch64.dmg`, open it and **double-click `install.command`** — it copies Navi to `/Applications`, clears the quarantine flag (xattr) and launches it. Terminal will ask for your admin password once. If macOS blocks the script itself (unsigned): right-click → **Open**, or on macOS 15+ go to System Settings → **Privacy & Security** → **Open Anyway** — the classic unsigned-app workaround.
+            **macOS (Apple Silicon)**: recommended — `brew install --cask hdusy/navi/navi` (no Gatekeeper prompt, opens directly). Or download `Navi_*_aarch64.dmg`, open it and **double-click `install.command`** — it copies Navi to `/Applications`, clears the quarantine flag (xattr) and launches it, no password needed. If macOS blocks the script itself (unsigned): right-click → **Open**, or on macOS 15+ go to System Settings → **Privacy & Security** → **Open Anyway**.
 
             **Windows**: download `Navi_*_x64-setup.exe` (NSIS installer, per-user install, no admin needed). Unsigned — on first launch click **More info → Run anyway** to dismiss SmartScreen.
-          # 保持草稿（draft），不会自动公开。确认无误后到 Release 页面点
-          # 「Publish release」，或 `gh release edit ${{ github.ref_name }} --draft=false`。
-          releaseDraft: true
+          # 直接发布（非草稿）：下方 Homebrew Cask 步骤需要资产公开 URL
+          # 立即可用，`brew install` 才能拉到 dmg。
+          releaseDraft: false
           prerelease: false
           args: --target ${{ matrix.target }}
 
       # tauri-action 只上传打包产物（不含 scripts/）。这里把 install.command
       # 注入 macOS DMG（塞到 Navi.app 旁边），再 clobber 覆盖同名资产，
       # 用户打开 DMG 双击 install.command 即可安装并绕过 Gatekeeper。
+      # 注意：必须在下方 Homebrew Cask 步骤之前完成——cask 的 sha256
+      # 要对最终（注入后）的 dmg 计算。
       - name: Inject install.command into DMG
         if: matrix.os == 'macos-latest'
         run: |
@@ -103,3 +105,69 @@ jobs:
           gh release upload "${{ github.ref_name }}" "$DMG" --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # 照抄 tokenscope 的 Homebrew Cask 自动更新：release 资产就绪后
+      # 下载 dmg 算 sha256，推到 HduSy/homebrew-navi tap 仓库。
+      # cask 里 postflight 会清掉隔离标（xattr -cr），brew 用户零弹窗直接打开。
+      # 跨仓库推送用 SSH deploy key（只授权 homebrew-navi 单仓库，可随时撤销）。
+      - name: Update Homebrew Cask
+        if: matrix.os == 'macos-latest'
+        env:
+          HOMEBREW_TAP_DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          DMG_NAME="Navi_${VERSION}_aarch64.dmg"
+          DOWNLOAD_URL="https://github.com/HduSy/navi/releases/download/${GITHUB_REF_NAME}/${DMG_NAME}"
+
+          # 等待注入步骤 clobber 上传的最终资产可下载；-f 保证 404 时不把
+          # 错误页当 dmg 去算 sha256。
+          SHA256=""
+          for i in $(seq 1 10); do
+            if curl -fsSL "$DOWNLOAD_URL" -o /tmp/navi.dmg; then
+              SHA256=$(shasum -a 256 /tmp/navi.dmg | cut -d' ' -f1)
+              break
+            fi
+            echo "Retry $i: asset not ready yet..."
+            sleep 10
+          done
+          if [ -z "$SHA256" ]; then
+            echo "::error::Release asset $DMG_NAME never became available"; exit 1
+          fi
+
+          mkdir -p ~/.ssh
+          echo "$HOMEBREW_TAP_DEPLOY_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H github.com >> ~/.ssh/known_hosts 2>/dev/null
+          git clone git@github.com:HduSy/homebrew-navi.git /tmp/homebrew-tap
+          mkdir -p /tmp/homebrew-tap/Casks
+          cat > /tmp/homebrew-tap/Casks/navi.rb <<CASK
+          cask "navi" do
+            version "${VERSION}"
+            sha256 "${SHA256}"
+
+            url "${DOWNLOAD_URL}"
+            name "Navi"
+            desc "AI work companion that observes, remembers, and grows with you"
+            homepage "https://github.com/HduSy/navi"
+
+            depends_on macos: ">= :catalina"
+            depends_on arch: :arm64
+
+            app "Navi.app"
+
+            # Unsigned/unnotarized build: strip the quarantine flag Homebrew
+            # adds so the app opens without the "Apple cannot verify" prompt.
+            postflight do
+              system_command "/usr/bin/xattr",
+                             args: ["-cr", "#{appdir}/Navi.app"],
+                             sudo: false
+            end
+          end
+          CASK
+
+          cd /tmp/homebrew-tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Casks/navi.rb
+          git diff --cached --quiet || git commit -m "Update cask to v${VERSION}"
+          git push

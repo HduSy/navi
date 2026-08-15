@@ -99,6 +99,13 @@ macOS 下载后需绕过 Gatekeeper，Windows 需绕过 SmartScreen。
 5. macOS job 追加一步 `Inject install.command into DMG`：用
    `scripts/patch-dmg.sh` 把安装脚本塞进 dmg（UDRW → 挂载注入 → UDZO），
    再 `gh release upload --clobber` 覆盖同名 dmg 资产
+6. macOS job 追加一步 `Update Homebrew Cask`（照抄 tokenscope）：下载最终
+   dmg 算 sha256，推送到 [HduSy/homebrew-navi](https://github.com/HduSy/homebrew-navi)
+   tap 仓库。cask 的 `postflight` 用 `xattr -cr` 清隔离标，brew 用户
+   `brew install --cask hdusy/navi/navi` 零弹窗直接打开——未签名 app 的
+   唯一免费「无 Gatekeeper 提示」分发方式（curl 下载/清标不走浏览器链路）。
+   跨仓库推送用 SSH deploy key（`HOMEBREW_TAP_DEPLOY_KEY` secret，只授权
+   homebrew-navi 单仓库）
 
 ### 代码签名（可选）
 
