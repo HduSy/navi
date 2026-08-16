@@ -1,6 +1,6 @@
 [package]
 name = "navi-desktop"
-version = "0.3.1"
+version = "0.3.2"
 description = "Navi — your AI work companion that observes, remembers, and grows with you."
 edition = "2021"
 
