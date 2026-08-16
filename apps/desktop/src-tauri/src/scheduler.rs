@@ -209,6 +209,15 @@ where
     let id = record_run_start(task, start);
     match f().await {
         Ok(result) => {
+            // LLM 相关的失败（未配置大脑 / 限流 / 额度等）全局 toast 提示，
+            // 避免后台任务静默停摆几小时才被发现
+            if result.get("ok").and_then(|v| v.as_bool()) == Some(false) {
+                if let Some(reason) = result.get("reason").and_then(|v| v.as_str()) {
+                    if reason.contains("大脑") || reason.contains("LLM") {
+                        crate::state::emit_llm_error(reason);
+                    }
+                }
+            }
             let result_str = serde_json::to_string(&result).unwrap_or_else(|_| "{\"ok\":true}".to_string());
             record_run_finish(id, "done", &result_str, start);
             Some(result)

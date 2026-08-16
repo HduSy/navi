@@ -1,6 +1,7 @@
-import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
+import { Routes, Route, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useEffect, useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
+import { listen } from '@tauri-apps/api/event'
 import { Chat } from './pages/Chat'
 import { Timeline } from './pages/Timeline'
 import { Diary } from './pages/Diary'
@@ -284,8 +285,51 @@ function SideNavItems() {
   )
 }
 
+/** LLM 调用失败的全局 toast（Rust 侧 emit_llm_error → llm-error 事件） */
+function LlmErrorToaster() {
+  const [toasts, setToasts] = useState<{ id: number; text: string }[]>([])
+  useEffect(() => {
+    let unlisten: (() => void) | undefined
+    listen<{ reason?: string }>('llm-error', (e) => {
+      const text = e.payload?.reason || 'LLM 调用失败'
+      const id = Date.now() + Math.random()
+      // 最多同时挂 3 条，防极端情况下刷屏
+      setToasts((ts) => (ts.length >= 3 ? ts.slice(1) : ts).concat({ id, text }))
+      setTimeout(() => setToasts((ts) => ts.filter((x) => x.id !== id)), 6000)
+    }).then((fn) => (unlisten = fn))
+    return () => unlisten?.()
+  }, [])
+  if (toasts.length === 0) return null
+  return createPortal(
+    <div className="fixed top-2.5 left-1/2 -translate-x-1/2 z-[100] flex flex-col items-center gap-2 w-max max-w-[70vw]">
+      {toasts.map((t) => (
+        <div
+          key={t.id}
+          className="llm-toast-in px-3.5 py-2.5 rounded-sm border border-red-300 bg-cream-50 shadow-[0_4px_12px_rgba(0,0,0,0.12)] text-[12px] leading-[1.5] text-stone-700"
+        >
+          <span className="mono text-[11px] text-red-500 mr-1.5">LLM</span>
+          {t.text}
+        </div>
+      ))}
+    </div>,
+    document.body
+  )
+}
+
 export function App() {
   const accent = useAccentFromRoute()
+  const navigate = useNavigate()
+
+  // 未配置有效大脑（DB 无可用 key 且 claude settings.json 不可用）时，
+  // 首开直接引导到「脑子」页完成配置
+  useEffect(() => {
+    window.navi
+      .getBrain('analysis')
+      .then((b) => {
+        if (!b.apiKey) navigate('/brain', { replace: true })
+      })
+      .catch(() => {})
+  }, [navigate])
 
   // 切路由时同步 accent CSS 变量
   useEffect(() => {
@@ -330,6 +374,9 @@ export function App() {
           <Route path="/brain" element={<Brain />} />
         </Routes>
       </DragRegion>
+
+      {/* LLM 失败全局 toast */}
+      <LlmErrorToaster />
     </div>
   )
 }

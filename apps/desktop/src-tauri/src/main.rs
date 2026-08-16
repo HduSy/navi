@@ -75,7 +75,9 @@ fn main() {
             commands::sync_cognition,
             commands::get_cognition_sync_status,
         ])
-        .setup(|_app| {
+        .setup(|app| {
+            // 全局 AppHandle：后台任务的 LLM 失败事件要 emit 给前端
+            let _ = state::APP_HANDLE.set(app.handle().clone());
             // 窗口先行：配置驱动创建，下面初始化任务都是重活，全部丢后台线程
             tauri::async_runtime::spawn(async {
                 startup_sequence().await;

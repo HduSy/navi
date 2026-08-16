@@ -205,3 +205,10 @@
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
   }
 }
+
+/* LLM 失败 toast：顶部水平居中，自上下移入场 */
+@keyframes llm-toast-in {
+  from { opacity: 0; transform: translateY(-14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.llm-toast-in { animation: llm-toast-in 0.28s cubic-bezier(0.22, 1, 0.36, 1); }

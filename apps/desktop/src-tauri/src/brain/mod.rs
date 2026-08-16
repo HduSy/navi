@@ -305,6 +305,7 @@ pub async fn chat(
             Err(e) => {
                 let st = e.status().unwrap_or(0);
                 if (st != 429 && st != 529) || attempt >= max_retries {
+                    crate::state::emit_llm_error(&format!("大脑调用失败：{}", e.message));
                     return Err(e);
                 }
                 let backoff = backoff_delay(attempt, e.retry_after_ms());
@@ -339,7 +340,11 @@ pub async fn chat_stream(
             .json(&body)
             .send()
             .await
-            .map_err(|e| HttpCallError { message: e.to_string(), status: None, retry_after_ms: None })?;
+            .map_err(|e| {
+                let msg = e.to_string();
+                crate::state::emit_llm_error(&format!("大脑连接失败：{}", msg));
+                HttpCallError { message: msg, status: None, retry_after_ms: None }
+            })?;
         let status = res.status().as_u16();
         if !(200..300).contains(&status) {
             let retry_after = res
@@ -355,6 +360,7 @@ pub async fn chat_stream(
                 attempt += 1;
                 continue;
             }
+            crate::state::emit_llm_error(&format!("大脑调用失败：{}", err.message));
             return Err(err);
         }
         // 解析 SSE：按行切 data: 负载；容忍半行（跨 chunk）与无法解析的行

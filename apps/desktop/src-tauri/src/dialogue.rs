@@ -72,6 +72,7 @@ where
     // 2. 对话大脑：RAG 检索 + 组装 system prompt
     let dialogue_brain = get_brain("dialogue");
     if dialogue_brain.api_key.is_empty() {
+        crate::state::emit_llm_error("对话大脑未配置 API key，请到「脑子」页填写");
         return DialogueResult {
             reply: "我还没配置对话脑子的模型 API key。请到「脑子」视图填一下（任意支持 OpenAI 兼容接口的供应商都行），我才能真正开口。".into(),
             routed_brain: "dialogue".into(),
