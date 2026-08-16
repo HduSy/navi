@@ -321,7 +321,7 @@ function BrainConfigSheet({
           boxShadow: '-12px 0 32px -16px rgba(28, 25, 23, 0.28)'
         }}
       >
-        <header className="shrink-0 flex items-center justify-between px-5 pt-3 pb-2 border-b border-stone-300">
+        <header className="shrink-0 flex items-center justify-between px-5 py-2.5 border-b border-stone-300">
           <div className="flex items-baseline gap-2">
             <h3 className="text-[15px] font-semibold text-stone-700">{scopeInfo.label} 配置</h3>
             <span className="mono text-[11px] text-stone-400">{scope}</span>

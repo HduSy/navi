@@ -40,7 +40,7 @@ export function Skills() {
   return (
     <div className="h-full flex flex-col">
       {!loading && used.length > 0 && (
-        <div className="shrink-0 flex items-center gap-2 flex-wrap px-7 pt-[22px] pb-3 border-b border-stone-300">
+        <div className="shrink-0 flex items-center gap-2 flex-wrap px-7 py-2.5 border-b border-stone-300">
           <button
             onClick={() => setSortBy('latest')}
             className={
@@ -94,18 +94,18 @@ export function Skills() {
         ) : used.length === 0 ? (
           <Empty text="还没用过任何扩展，去 ClaudeCode 里调几个 skill 或 MCP 吧" />
         ) : (
-          <div className="space-y-5 w-full">
-
-            {filter === 'skill' && skills.length > 0 && (
-              <CardGrid items={skills} effectiveEnabled={effectiveEnabled} onToggle={toggle} />
-            )}
-            {filter === 'mcp' && mcps.length > 0 && (
-              <CardGrid items={mcps} effectiveEnabled={effectiveEnabled} onToggle={toggle} />
-            )}
-            {filter === 'mcp' && mcps.length === 0 && (
-              <Empty text="还没用过 MCP" />
-            )}
-          </div>
+          filter === 'mcp' && mcps.length === 0 ? (
+            <Empty text="还没用过 MCP" />
+          ) : (
+            <div className="space-y-5 w-full">
+              {filter === 'skill' && skills.length > 0 && (
+                <CardGrid items={skills} effectiveEnabled={effectiveEnabled} onToggle={toggle} />
+              )}
+              {filter === 'mcp' && mcps.length > 0 && (
+                <CardGrid items={mcps} effectiveEnabled={effectiveEnabled} onToggle={toggle} />
+              )}
+            </div>
+          )
         )}
       </div>
     </div>

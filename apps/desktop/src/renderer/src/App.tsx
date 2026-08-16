@@ -234,6 +234,15 @@ function NaviWatermark(): React.ReactElement {
  *  制造横向滚动；portal 到 body 后不参与容器溢出计算，视觉不变。 */
 function SideNavItems() {
   const [tip, setTip] = useState<{ text: string; x: number; y: number } | null>(null)
+  const tipTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const cancelTip = () => {
+    if (tipTimer.current) {
+      clearTimeout(tipTimer.current)
+      tipTimer.current = null
+    }
+    setTip(null)
+  }
+  useEffect(() => cancelTip, [])
 
   return (
     <>
@@ -246,10 +255,15 @@ function SideNavItems() {
                 <li
                   key={item.to}
                   onMouseEnter={(e) => {
+                    // 悬停 1s 才出现：快速划过导航时不打扰
+                    cancelTip()
                     const r = e.currentTarget.getBoundingClientRect()
-                    setTip({ text: item.tip, x: r.right + 8, y: r.top + r.height / 2 })
+                    // 锚定 tab 右上角：左移压到 tab 右端，视觉上挂在 tab 上而非浮在内容区
+                    const x = r.right - 80
+                    const y = r.top - 6
+                    tipTimer.current = setTimeout(() => setTip({ text: item.tip, x, y }), 1000)
                   }}
-                  onMouseLeave={() => setTip(null)}
+                  onMouseLeave={cancelTip}
                 >
                   <NavLink
                     to={item.to}
@@ -274,7 +288,7 @@ function SideNavItems() {
         createPortal(
           <div
             role="tooltip"
-            style={{ position: 'fixed', left: tip.x, top: tip.y, transform: 'translateY(-50%)', maxWidth: 220 }}
+            style={{ position: 'fixed', left: tip.x, top: tip.y, maxWidth: 220 }}
             className="pointer-events-none z-50 px-2.5 py-1.5 rounded-sm border border-stone-300 bg-cream-200 text-stone-600 text-[11px] leading-[1.5] whitespace-normal shadow-[0_4px_12px_rgba(0,0,0,0.08)]"
           >
             {tip.text}

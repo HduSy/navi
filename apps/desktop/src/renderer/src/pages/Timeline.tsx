@@ -97,7 +97,7 @@ export function Timeline() {
 
   return (
     <div className="h-full flex flex-col">
-      <NoDrag className="shrink-0 flex items-center gap-2 px-7 pt-3 pb-2 border-b border-stone-300">
+      <NoDrag className="shrink-0 flex items-center gap-2 px-7 py-2.5 border-b border-stone-300">
         <div className="flex items-center gap-2">
           <button
             onClick={() => shift(-1)}

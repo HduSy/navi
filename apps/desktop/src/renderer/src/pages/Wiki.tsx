@@ -69,7 +69,7 @@ export function Wiki() {
     <div className="h-full flex flex-col">
       {!selected ? (
         <>
-          <div className="shrink-0 flex items-center gap-2.5 px-7 pt-3 pb-2 border-b border-stone-300">
+          <div className="shrink-0 flex items-center gap-2.5 px-7 py-2.5 border-b border-stone-300">
             <span className="flex items-center gap-1.5 mono text-[11px] text-stone-400">
               <span>踩过的坑，Navi 都帮你记着</span>
               {pages.length > 0 && (
@@ -179,7 +179,7 @@ function Detail({
 }) {
   return (
     <>
-      <div className="shrink-0 bg-cream-50 border-b border-stone-300 px-7 pt-3 pb-2 flex items-center justify-between">
+      <div className="shrink-0 bg-cream-50 border-b border-stone-300 px-7 py-2.5 flex items-center justify-between">
         <div className="flex items-center gap-3 min-w-0">
           <NoDrag className="shrink-0">
             <Button variant="outlined" size="sm" onClick={onBack}>← 返回</Button>
