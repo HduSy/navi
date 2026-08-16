@@ -53,7 +53,13 @@ pub fn get_brain(scope: &str) -> BrainProviderConfig {
         .ok();
     drop(conn);
     if let Some((provider, model, base_url, api_key, temperature)) = row {
-        return from_row(scope, provider, model, base_url, api_key, temperature);
+        // 配置行存在但 api_key 标记解密为空（如旧版 keychain: 遗留、换设备）时，
+        // 不能拿「空 key 的自定义配置」硬走——那会让所有 LLM 任务静默停摆。
+        // 视为无效配置，回退到 claude settings.json 派生。
+        let decrypt_failed = !api_key.is_empty() && decrypt_secret(&api_key).is_empty();
+        if !decrypt_failed {
+            return from_row(scope, provider, model, base_url, api_key, temperature);
+        }
     }
     let cc = read_claude_config();
     if cc.available {
