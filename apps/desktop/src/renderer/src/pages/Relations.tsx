@@ -254,7 +254,7 @@ function ForceGraph({
   const byId = new Map(nodes.map((n) => [n.id, n]))
 
   return (
-    <div ref={containerRef} className="w-full h-full min-h-[400px]">
+    <div ref={containerRef} data-nodrag className="w-full h-full min-h-[400px]">
       <svg width="100%" height="100%" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="xMidYMid meet">
         {/* edges */}
         {relationships.map((rel) => {

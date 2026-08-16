@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useLayoutEffect, useMemo } from 'react'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 
 /** 把 epoch ms 转本地日期 YYYY-MM-DD 字符串（renderer 端便捷方法） */
 export function toLocalDateStr(ms: number): string {
@@ -16,9 +17,30 @@ export function fromLocalDateStr(date: string): number {
   return new Date(y, m - 1, d, 0, 0, 0, 0).getTime()
 }
 
+/** 按下点是否落在文本节点矩形内（区分「空白可拖窗」与「文字可选择」）：
+ *  从事件目标向上走到 drag 根，逐层只测各元素的直接文本节点。 */
+function isOverText(x: number, y: number, root: HTMLElement, target: HTMLElement): boolean {
+  let el: HTMLElement | null = target
+  while (el) {
+    for (let n = el.firstChild; n; n = n.nextSibling) {
+      if (n.nodeType === Node.TEXT_NODE && n.textContent && n.textContent.trim()) {
+        const range = document.createRange()
+        range.selectNodeContents(n)
+        for (const r of range.getClientRects()) {
+          if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return true
+        }
+      }
+    }
+    if (el === root) break
+    el = el.parentElement
+  }
+  return false
+}
+
 /** 窗口拖动：用于非交互区域的根容器，使该区可拖动窗口。
- *  Tauri/WKWebView 下用 data-tauri-drag-region（事件目标级生效）；
- *  保留 WebkitAppRegion 样式属性以兼容其余 webview。 */
+ *  - 事件目标是容器自身时走原生 data-tauri-drag-region（含双击最大化）；
+ *  - 目标是子元素时兜底代理：交互元素（按钮/输入/链接等）与文字区
+ *    （保留选择行为）不拖，其余空白一律可拖动窗口。 */
 export function DragRegion({
   children,
   className = '',
@@ -32,6 +54,15 @@ export function DragRegion({
     <div
       className={className}
       data-tauri-drag-region
+      onMouseDown={(e) => {
+        if (e.button !== 0) return
+        const t = e.target as HTMLElement
+        const root = e.currentTarget as HTMLElement
+        if (t.hasAttribute('data-tauri-drag-region')) return // 交给原生脚本
+        if (t.closest('button, input, textarea, select, a, label, [contenteditable], [role="button"], [data-nodrag]')) return
+        if (isOverText(e.clientX, e.clientY, root, t)) return // 文字区：保留选择
+        getCurrentWindow().startDragging().catch(() => {})
+      }}
       style={{ WebkitAppRegion: 'drag', ...style } as React.CSSProperties}
     >
       {children}

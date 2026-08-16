@@ -1,5 +1,6 @@
 import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
 import { useEffect, useState, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { Chat } from './pages/Chat'
 import { Timeline } from './pages/Timeline'
 import { Diary } from './pages/Diary'
@@ -9,7 +10,7 @@ import { Personality } from './pages/Personality'
 import { Skills } from './pages/Skills'
 import { Relations } from './pages/Relations'
 import { Brain } from './pages/Brain'
-import { DragRegion, NoDrag, setAccent, formatClock } from './components'
+import { DragRegion, setAccent, formatClock } from './components'
 import type { AccentPage } from './components'
 import { getChatPhase, subscribeChatPhase } from './face-state'
 import {
@@ -227,6 +228,62 @@ function NaviWatermark(): React.ReactElement {
   )
 }
 
+/** 侧边导航项。tooltip 用 fixed + portal 渲染：
+ *  绝对定位的 tooltip 会向右伸出 224px 的 nav，在 overflow 容器里
+ *  制造横向滚动；portal 到 body 后不参与容器溢出计算，视觉不变。 */
+function SideNavItems() {
+  const [tip, setTip] = useState<{ text: string; x: number; y: number } | null>(null)
+
+  return (
+    <>
+      <DragRegion className="flex-1 overflow-y-auto overflow-x-hidden px-2 py-2.5">
+        {NAV_SECTIONS.map((section) => (
+          <div key={section.label}>
+            <div className="mono text-[11px] tracking-[0.06em] text-stone-400 px-2 pt-2.5 pb-1.5">{section.label}</div>
+            <ul className="space-y-0">
+              {section.items.map((item) => (
+                <li
+                  key={item.to}
+                  onMouseEnter={(e) => {
+                    const r = e.currentTarget.getBoundingClientRect()
+                    setTip({ text: item.tip, x: r.right + 8, y: r.top + r.height / 2 })
+                  }}
+                  onMouseLeave={() => setTip(null)}
+                >
+                  <NavLink
+                    to={item.to}
+                    end={item.to === '/'}
+                    className={({ isActive }) =>
+                      'flex items-center gap-[9px] px-2 py-[7px] rounded-sm border transition-colors duration-150 ease-organic text-[13px] font-medium ' +
+                      (isActive
+                        ? 'bg-accent-soft text-stone-700 border-accent-line'
+                        : 'text-stone-500 border-transparent hover:bg-stone-100 hover:text-stone-600')
+                    }
+                  >
+                    <item.Icon className="shrink-0 opacity-80" />
+                    <span>{item.label}</span>
+                  </NavLink>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </DragRegion>
+      {tip &&
+        createPortal(
+          <div
+            role="tooltip"
+            style={{ position: 'fixed', left: tip.x, top: tip.y, transform: 'translateY(-50%)', maxWidth: 220 }}
+            className="pointer-events-none z-50 px-2.5 py-1.5 rounded-sm border border-stone-300 bg-cream-200 text-stone-600 text-[11px] leading-[1.5] whitespace-normal shadow-[0_4px_12px_rgba(0,0,0,0.08)]"
+          >
+            {tip.text}
+          </div>,
+          document.body
+        )}
+    </>
+  )
+}
+
 export function App() {
   const accent = useAccentFromRoute()
 
@@ -256,43 +313,11 @@ export function App() {
       {/* 左 nav */}
       <nav className="relative z-10 border-r border-stone-300 bg-cream-50 flex flex-col min-h-0" style={{ gridArea: 'nav' }}>
         <DragRegion className="h-2 shrink-0" />
-        <NoDrag className="flex-1 overflow-auto px-2 py-2.5">
-          {NAV_SECTIONS.map((section) => (
-            <div key={section.label}>
-              <div className="mono text-[11px] tracking-[0.06em] text-stone-400 px-2 pt-2.5 pb-1.5">{section.label}</div>
-              <ul className="space-y-0">
-                {section.items.map((item) => (
-                  <li key={item.to} className="group relative">
-                    <NavLink
-                      to={item.to}
-                      end={item.to === '/'}
-                      className={({ isActive }) =>
-                        'flex items-center gap-[9px] px-2 py-[7px] rounded-sm border transition-colors duration-150 ease-organic text-[13px] font-medium ' +
-                        (isActive
-                          ? 'bg-accent-soft text-stone-700 border-accent-line'
-                          : 'text-stone-500 border-transparent hover:bg-stone-100 hover:text-stone-600')
-                      }
-                    >
-                      <item.Icon className="shrink-0 opacity-80" />
-                      <span>{item.label}</span>
-                    </NavLink>
-                    {/* hover tooltip：nav 项右侧浮出，类似图片 alt 交互 */}
-                    <span
-                      role="tooltip"
-                      className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 z-50 max-w-[220px] px-2.5 py-1.5 rounded-sm border border-stone-300 bg-cream-200 text-stone-600 text-[11px] leading-[1.5] whitespace-normal opacity-0 group-hover:opacity-100 transition-opacity duration-150 shadow-[0_4px_12px_rgba(0,0,0,0.08)]"
-                    >
-                      {item.tip}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </NoDrag>
+        <SideNavItems />
       </nav>
 
-      {/* 右 main */}
-      <main className="relative z-10 flex flex-col overflow-hidden min-h-0" style={{ gridArea: 'main' }}>
+      {/* 右 main：整块纳入拖拽代理（文字区/交互元素自动豁免） */}
+      <DragRegion className="relative z-10 flex flex-col overflow-hidden min-h-0" style={{ gridArea: 'main' }}>
         <Routes>
           <Route path="/" element={<Chat />} />
           <Route path="/timeline" element={<Timeline />} />
@@ -304,7 +329,7 @@ export function App() {
           <Route path="/relations" element={<Relations />} />
           <Route path="/brain" element={<Brain />} />
         </Routes>
-      </main>
+      </DragRegion>
     </div>
   )
 }
