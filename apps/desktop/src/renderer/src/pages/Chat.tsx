@@ -16,6 +16,7 @@ export function Chat() {
   const [messages, setMessages] = useState<DisplayMessage[]>([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
+  const [stopping, setStopping] = useState(false)
   // 当前这轮发送的流式文本（接收侧思考/输出状态），reqId 归属
   const [streamText, setStreamText] = useState('')
   const reqIdRef = useRef('')
@@ -40,12 +41,39 @@ export function Chat() {
     void refresh()
   }, [])
 
-  // 流式输出时贴底跟随（仅当已接近底部，避免打断用户回看历史）
+  // 切 tab 期间有消息在途（Rust 侧仍在跑 LLM）：恢复等待态并轮询，
+  // 完成后从库里拉回完整对话（用户消息在 LLM 前已落库，不会丢）
+  useEffect(() => {
+    let timer: ReturnType<typeof setInterval> | null = null
+    void window.navi.isChatBusy().then((busy) => {
+      if (!busy) return
+      setSending(true)
+      setChatPhase('thinking')
+      timer = setInterval(() => {
+        void window.navi.isChatBusy().then((stillBusy) => {
+          if (!stillBusy) {
+            if (timer) clearInterval(timer)
+            timer = null
+            void refresh().then(() => {
+              setSending(false)
+              setChatPhase('idle')
+            })
+          }
+        })
+      }, 1500)
+    })
+    return () => {
+      if (timer) clearInterval(timer)
+    }
+  }, [])
+
+  // 发送/接收期间始终贴底：发消息即滚到底，流式与收尾持续跟随最新内容
+  // （仅本轮对话内强制；平时浏览历史不受影响）
   useEffect(() => {
     const el = scrollRef.current
     if (!el || !sending) return
-    if (el.scrollHeight - el.scrollTop - el.clientHeight < 80) el.scrollTop = el.scrollHeight
-  }, [streamText, sending])
+    el.scrollTop = el.scrollHeight
+  }, [messages, streamText, sending])
 
   // preset：气泡建议直接传入发送（绕过 input state，同步可用）
   async function send(preset?: string): Promise<void> {
@@ -133,6 +161,7 @@ export function Chat() {
       ])
     } finally {
       setSending(false)
+      setStopping(false)
       setChatPhase('idle')
     }
   }
@@ -189,9 +218,24 @@ export function Chat() {
                 disabled={sending}
                 className="flex-1 min-w-0 bg-cream-200 border border-stone-300 rounded px-3 py-2 text-[13.5px] text-stone-700 placeholder-stone-400 focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent-soft transition-colors duration-150 disabled:opacity-50"
               />
-              <Button onClick={() => void send()} disabled={sending || !input.trim()}>
-                {sending ? '...' : '发送'}
-              </Button>
+              {sending ? (
+                <Button
+                  onClick={() => {
+                    if (stopping) return
+                    setStopping(true)
+                    void window.navi.stopChat()
+                  }}
+                  disabled={stopping}
+                  title="停止生成"
+                  className="w-[88px]"
+                >
+                  {stopping ? '停止中…' : '■ 停止'}
+                </Button>
+              ) : (
+                <Button onClick={() => void send()} disabled={!input.trim()} className="w-[88px]">
+                  发送
+                </Button>
+              )}
             </NoDrag>
           </DragRegion>
         </section>

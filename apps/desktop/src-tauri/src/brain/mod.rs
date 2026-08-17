@@ -323,6 +323,7 @@ pub async fn chat_stream(
     messages: &[ChatMessage],
     opts: ChatOpts,
     mut on_delta: impl FnMut(String),
+    should_stop: impl Fn() -> bool,
 ) -> Result<ChatResult, HttpCallError> {
     let is_anthropic = is_anthropic_protocol(&config.base_url, config.protocol);
     let max_retries: u32 = 3;
@@ -334,17 +335,23 @@ pub async fn chat_stream(
             build_openai_request(config, messages, &ChatOpts { max_tokens: opts.max_tokens, json: false })
         };
         body["stream"] = serde_json::json!(true);
-        let res = client()
-            .post(&url)
-            .headers(headers)
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| {
+        // 请求头等待期与 SSE 静默期（推理模型思考阶段可能长时间无数据块）
+        // 都要能即时响应停止：select! 竞争「停止信号」分支会直接取消请求 future，
+        // 实现毫秒级断连
+        let send_fut = client().post(&url).headers(headers).json(&body).send();
+        let res = tokio::select! {
+            r = send_fut => r.map_err(|e| {
                 let msg = e.to_string();
                 crate::state::emit_llm_error(&format!("大脑连接失败：{}", msg));
                 HttpCallError { message: msg, status: None, retry_after_ms: None }
-            })?;
+            })?,
+            _ = async {
+                loop {
+                    if should_stop() { return }
+                    tokio::time::sleep(std::time::Duration::from_millis(100)).await
+                }
+            } => return Ok(ChatResult { content: String::new() }),
+        };
         let status = res.status().as_u16();
         if !(200..300).contains(&status) {
             let retry_after = res
@@ -368,7 +375,22 @@ pub async fn chat_stream(
         let mut stream = res.bytes_stream();
         let mut buf = String::new();
         let mut content = String::new();
-        while let Some(chunk) = stream.next().await {
+        loop {
+            // 200ms 超时轮询：SSE 静默期（思考阶段）也能即时响应停止
+            let chunk = match tokio::time::timeout(std::time::Duration::from_millis(200), stream.next()).await {
+                Err(_) => {
+                    if should_stop() {
+                        return Ok(ChatResult { content });
+                    }
+                    continue;
+                }
+                Ok(None) => break,
+                Ok(Some(c)) => c,
+            };
+            // 用户请求停止：以已生成的部分文本作为最终结果（对齐 ChatGPT 停止行为）
+            if should_stop() {
+                return Ok(ChatResult { content });
+            }
             let chunk = chunk.map_err(|e| HttpCallError { message: e.to_string(), status: None, retry_after_ms: None })?;
             buf.push_str(&String::from_utf8_lossy(&chunk));
             // JS 语义：split('\n') 后 pop 出最后一段作为跨 chunk 残留

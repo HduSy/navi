@@ -8,6 +8,27 @@ use crate::util::{from_local_date_str, to_local_date_str};
 use chrono::{Local, TimeZone, Timelike};
 use rusqlite::params;
 use serde_json::json;
+use std::sync::atomic::{AtomicBool, Ordering};
+
+/// 对话是否在途：切 tab 重挂载后据此恢复「等待回复」态
+pub static CHAT_BUSY: AtomicBool = AtomicBool::new(false);
+
+/// 用户请求停止当前对话：chat_stream 的 SSE 循环逐块检查，
+/// 命中后以已生成的部分文本作为回复正常收尾
+pub static CHAT_ABORT: AtomicBool = AtomicBool::new(false);
+
+pub fn is_chat_busy() -> bool {
+    CHAT_BUSY.load(Ordering::Relaxed)
+}
+
+pub fn request_stop_chat() {
+    CHAT_ABORT.store(true, Ordering::Relaxed);
+}
+
+/// 新一轮发送前重置停止标记
+pub fn reset_chat_round() {
+    CHAT_ABORT.store(false, Ordering::Relaxed);
+}
 
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -40,8 +61,42 @@ where
     let now = crate::paths::now_ms();
     let user_msg_id = new_uuid();
 
-    // 1. 先尝试行动大脑路由（人格调校/查询意图）
-    if let Ok((recognized, applied)) = route_adjust_intent(user_message).await {
+    // 1. 先尝试行动大脑路由（人格调校/查询意图）。
+    //    路由是非流式 LLM 调用（推理模型思考可达数秒），select! 包裹使其
+    //    也能被即时停止：取消 future 即断开 HTTP 连接
+    let route_result = tokio::select! {
+        r = route_adjust_intent(user_message) => r,
+        _ = async {
+            loop {
+                if CHAT_ABORT.load(Ordering::Relaxed) {
+                    return
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await
+            }
+        } => Ok((false, String::new())),
+    };
+    // 路由阶段被停止：用户消息与「已停止」回复落库后立即返回
+    if CHAT_ABORT.load(Ordering::Relaxed) {
+        {
+            let conn = get_db().0.lock().unwrap();
+            let _ = conn.execute(
+                "INSERT INTO chat_messages (id, role, content, routed_brain, context_used, created_at) VALUES (?1, 'user', ?2, 'dialogue', '{}', ?3)",
+                params![user_msg_id, user_message, now],
+            );
+            let _ = conn.execute(
+                "INSERT INTO chat_messages (id, role, content, routed_brain, context_used, created_at) VALUES (?1, 'navi', ?2, 'dialogue', '{}', ?3)",
+                params![new_uuid(), "（已停止）", crate::paths::now_ms()],
+            );
+        }
+        return DialogueResult {
+            reply: "（已停止）".into(),
+            routed_brain: "dialogue".into(),
+            action_taken: None,
+            context_used: json!({}),
+            error: Some("stopped".into()),
+        };
+    }
+    if let Ok((recognized, applied)) = route_result {
         if recognized {
             let reply = if !applied.is_empty() {
                 format!("好，我已经更新了自己：{}。下次就这样了。", applied)
@@ -84,6 +139,15 @@ where
 
     let personality = get_personality();
     let context = retrieve_context(user_message);
+
+    // 用户消息先落库再等 LLM：中途切 tab 重挂载时，历史里能立刻看到已发出的消息
+    {
+        let conn = get_db().0.lock().unwrap();
+        let _ = conn.execute(
+            "INSERT INTO chat_messages (id, role, content, routed_brain, context_used, created_at) VALUES (?1, 'user', ?2, 'dialogue', ?3, ?4)",
+            params![user_msg_id, user_message, serde_json::to_string(&context.raw).unwrap(), now],
+        );
+    }
 
     let mut sys_parts: Vec<String> = Vec::new();
     sys_parts.push("你是 Navi，用户的 AI 工作伙伴。你不是用户的镜像，是伙伴。".to_string());
@@ -150,25 +214,28 @@ where
         &messages,
         ChatOpts { max_tokens: Some(4096), json: false },
         |delta| on_delta(&delta),
+        || CHAT_ABORT.load(Ordering::Relaxed),
     )
     .await;
     let (reply, error) = match stream_result {
         Ok(r) => {
             let trimmed = r.content.trim().to_string();
-            (
-                if trimmed.is_empty() { "（我没生成出回复，请重试）".to_string() } else { trimmed },
-                None,
-            )
+            if trimmed.is_empty() {
+                // 停止导致的空文（思考阶段被掐断）显示已停止；真·空回复才提示重试
+                if CHAT_ABORT.load(Ordering::Relaxed) {
+                    ("（已停止）".to_string(), None)
+                } else {
+                    ("（我没生成出回复，请重试）".to_string(), None)
+                }
+            } else {
+                (trimmed, None)
+            }
         }
         Err(e) => (format!("对话大脑调用失败：{}", e), Some("brain_error".to_string())),
     };
 
     {
         let conn = get_db().0.lock().unwrap();
-        let _ = conn.execute(
-            "INSERT INTO chat_messages (id, role, content, routed_brain, context_used, created_at) VALUES (?1, 'user', ?2, 'dialogue', ?3, ?4)",
-            params![user_msg_id, user_message, serde_json::to_string(&context.raw).unwrap(), now],
-        );
         let _ = conn.execute(
             "INSERT INTO chat_messages (id, role, content, routed_brain, context_used, created_at) VALUES (?1, 'navi', ?2, 'dialogue', '{}', ?3)",
             params![new_uuid(), reply, crate::paths::now_ms()],

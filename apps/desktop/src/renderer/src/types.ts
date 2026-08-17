@@ -212,6 +212,8 @@ export interface NaviAPI {
   getSessionStats: () => Promise<SessionStats>
   ingest: () => Promise<IngestResult>
   sendMessage: (msg: string, reqId?: string) => Promise<DialogueResult>
+  isChatBusy: () => Promise<boolean>
+  stopChat: () => Promise<void>
   onChatDelta: (cb: (payload: { reqId: string; delta: string }) => void) => () => void
   getRecentMessages: () => Promise<ChatMessageRow[]>
   clearChat: () => Promise<number>

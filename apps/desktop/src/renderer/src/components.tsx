@@ -128,7 +128,8 @@ export function Button({
   disabled,
   variant = 'filled',
   size = 'md',
-  title
+  title,
+  className = ''
 }: {
   children: React.ReactNode
   onClick?: () => void
@@ -136,6 +137,7 @@ export function Button({
   variant?: 'filled' | 'outlined'
   size?: 'md' | 'sm'
   title?: string
+  className?: string
 }) {
   const base =
     variant === 'filled'
@@ -147,7 +149,7 @@ export function Button({
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className={`font-medium rounded-sm border transition-colors duration-150 ease-organic active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed ${pad} ${base}`}
+      className={`font-medium rounded-sm border transition-colors duration-150 ease-organic active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed ${pad} ${base} ${className}`}
     >
       {children}
     </button>

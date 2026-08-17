@@ -79,7 +79,21 @@ pub async fn send_message(app: AppHandle, msg: String, req_id: Option<String>) -
             let _ = app.emit("navi:chat:delta", json!({ "reqId": req_id, "delta": delta }));
         }
     };
-    crate::dialogue::send_message(&msg, on_delta).await
+    crate::dialogue::CHAT_BUSY.store(true, std::sync::atomic::Ordering::Relaxed);
+    crate::dialogue::reset_chat_round();
+    let result = crate::dialogue::send_message(&msg, on_delta).await;
+    crate::dialogue::CHAT_BUSY.store(false, std::sync::atomic::Ordering::Relaxed);
+    result
+}
+
+#[tauri::command(async)]
+pub fn is_chat_busy() -> bool {
+    crate::dialogue::is_chat_busy()
+}
+
+#[tauri::command(async)]
+pub fn stop_chat() {
+    crate::dialogue::request_stop_chat()
 }
 
 #[tauri::command(async)]

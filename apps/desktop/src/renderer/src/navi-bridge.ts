@@ -25,6 +25,8 @@ function buildNaviApi(): NaviAPI {
     // 对话
     sendMessage: (msg: string, reqId?: string) =>
       invoke('send_message', { msg, reqId: reqId ?? null }),
+    isChatBusy: () => invoke<boolean>('is_chat_busy'),
+    stopChat: () => invoke('stop_chat'),
     onChatDelta: (cb: (payload: { reqId: string; delta: string }) => void): (() => void) => {
       let unlisten: UnlistenFn | null = null
       let disposed = false

@@ -34,6 +34,8 @@ fn main() {
             commands::get_session_stats,
             commands::ingest,
             commands::send_message,
+            commands::is_chat_busy,
+            commands::stop_chat,
             commands::get_recent_messages,
             commands::clear_chat,
             commands::get_personality,
