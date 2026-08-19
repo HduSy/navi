@@ -1,6 +1,8 @@
 import { useEffect, useState, useRef } from 'react'
 import type { ChatMessageRow, SessionStats } from '../types'
 import { Button, Label, formatClock, formatTime, basename, NoDrag, DragRegion, useScrollRestore } from '../components'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { setChatPhase } from '../face-state'
 
 type DisplayMessage = ChatMessageRow
@@ -302,7 +304,11 @@ function MessageBubble({ msg }: { msg: DisplayMessage }) {
             行动
           </span>
         )}
-        <p className="whitespace-pre-wrap">{msg.content}</p>
+        {isUser ? (
+          <p className="whitespace-pre-wrap">{msg.content}</p>
+        ) : (
+          <ChatMarkdown text={msg.content} />
+        )}
         {msg.actionTaken && (
           <p className="text-xs mt-2 border-t border-stone-300 text-stone-400 pt-1.5">已执行：{msg.actionTaken}</p>
         )}
@@ -319,16 +325,58 @@ function MessageBubble({ msg }: { msg: DisplayMessage }) {
   )
 }
 
+/** 聊天气泡 markdown 渲染：LLM 输出直接映射为 React 元素（不经 innerHTML，天然防注入）。
+ *  样式对齐应用 cream/stone 色系；流式期间每帧重解析对 micromark 无压力 */
+function ChatMarkdown({ text }: { text: string }) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        p: ({ children }) => <p className="mb-1.5 last:mb-0">{children}</p>,
+        pre: ({ children }) => (
+          <pre className="mono text-[12.5px] leading-[1.5] bg-cream-50 border border-stone-200 rounded-sm px-2.5 py-2 my-1.5 overflow-x-auto">
+            {children}
+          </pre>
+        ),
+        code: ({ className, children }) => {
+          const isBlock = (className ?? '').includes('language-') || String(children).includes('\n')
+          return isBlock ? (
+            <code className="mono">{children}</code>
+          ) : (
+            <code className="mono text-[12.5px] bg-cream-50 border border-stone-200 rounded-sm px-1 py-[1px]">{children}</code>
+          )
+        },
+        a: ({ href, children }) => (
+          <a href={href} target="_blank" rel="noreferrer" className="text-accent underline underline-offset-2">
+            {children}
+          </a>
+        ),
+        ul: ({ children }) => <ul className="list-disc pl-5 my-1.5 space-y-0.5">{children}</ul>,
+        ol: ({ children }) => <ol className="list-decimal pl-5 my-1.5 space-y-0.5">{children}</ol>,
+        h1: ({ children }) => <h3 className="text-[15px] font-semibold mt-2.5 mb-1">{children}</h3>,
+        h2: ({ children }) => <h3 className="text-[15px] font-semibold mt-2.5 mb-1">{children}</h3>,
+        h3: ({ children }) => <h4 className="text-[14px] font-semibold mt-2 mb-1">{children}</h4>,
+        h4: ({ children }) => <h4 className="text-[14px] font-semibold mt-2 mb-1">{children}</h4>,
+        blockquote: ({ children }) => <blockquote className="border-l-2 border-stone-300 pl-3 my-1.5 text-stone-500">{children}</blockquote>,
+        table: ({ children }) => (
+          <table className="my-1.5 border-collapse text-[13px]">{children}</table>
+        ),
+        th: ({ children }) => <th className="border border-stone-300 bg-cream-50 px-2 py-1 text-left">{children}</th>,
+        td: ({ children }) => <td className="border border-stone-300 px-2 py-1">{children}</td>,
+      }}
+    >
+      {text}
+    </ReactMarkdown>
+  )
+}
+
 /** 等待/流式中的 Navi 侧气泡：首个增量前弹跳点（思考中），之后流式文本 + 光标 */
 function ThinkingBubble({ text }: { text: string }) {
   return (
     <article className="flex flex-col max-w-[72%] mb-4 items-start">
       <div className="px-[13px] py-2.5 rounded border text-[14px] leading-[1.6] break-words bg-cream-200 border-stone-300 text-stone-700 rounded-tl-sm">
         {text ? (
-          <p className="whitespace-pre-wrap">
-            {text}
-            <span className="animate-pulse">▍</span>
-          </p>
+          <ChatMarkdown text={`${text}▍`} />
         ) : (
           <span className="inline-flex items-center gap-1 py-[3px]" aria-label="Navi 正在思考">
             {[0, 150, 300].map((d) => (

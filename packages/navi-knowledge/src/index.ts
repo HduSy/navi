@@ -3,22 +3,23 @@
  * navi-knowledge —— Navi 认知 MCP server（stdio transport）。
  *
  * 工具：
- *   - search：查询认知（记忆 / 人格 / 技能 / 项目 / 关系）
+ *   - search：查询认知（琐事记忆 / 记忆页 / 人格 / 技能 / 项目 / 关系）
+ *   - remember：往「记忆」记一条琐事（memories 表，Navi 记忆页可见）
  *   - update：写一条记忆页到认知库（wiki/<type>/<slug>.md）
  *
  * 环境变量：
  *   - NAVI_USER_DATA：Navi userData 目录（navi.db + wiki/ 所在）。缺省按平台默认。
  *
- * 配置示例（Claude Code ~/.claude/settings.json）：
+ * 配置示例（任意支持 mcpServers JSON 的工具）：
  *   "mcpServers": {
- *     "navi-knowledge": { "command": "node", "args": ["<repo>/packages/navi-knowledge/dist/index.js"] }
+ *     "navi-knowledge": { "command": "npx", "args": ["-y", "navi-knowledge"] }
  *   }
  */
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
-import { searchCognition, updateMemory, resolveUserData } from './knowledge.js'
+import { searchCognition, updateMemory, rememberMemory, resolveUserData } from './knowledge.js'
 
 const server = new McpServer({
   name: 'navi-knowledge',
@@ -27,7 +28,7 @@ const server = new McpServer({
 
 server.tool(
   'search',
-  '查询 Navi 的认知库：记忆（wiki 页面）、人格、技能、项目、关系。返回匹配条目（类型/标题/摘要）。',
+  '查询 Navi 的认知库：琐事记忆（memories）、记忆页（wiki）、人格、技能、项目、关系。返回匹配条目（类型/标题/摘要）。',
   {
     query: z.string().describe('搜索关键词'),
     type: z
@@ -45,6 +46,36 @@ server.tool(
       .map((r, i) => `${i + 1}. [${r.type}] ${r.title}${r.snippet ? ` — ${r.snippet}` : ''}`)
       .join('\n')
     return { content: [{ type: 'text' as const, text }] }
+  }
+)
+
+server.tool(
+  'remember',
+  '往 Navi「记忆」里记一条琐事（日程/待办/计划/笔记）。当用户说「记住…」「别忘了…」「提醒我…」这类主动记忆表述时调用。',
+  {
+    content: z.string().describe('记忆内容本身（去掉「记住」这类指令措辞，保留完整信息）'),
+    category: z
+      .enum(['schedule', 'todo', 'plan', 'note'])
+      .optional()
+      .describe('分类：schedule=日程/定点要做（抢票、开会），todo=待办，plan=较长线计划，note=琐事。缺省 note'),
+    dueAt: z
+      .string()
+      .optional()
+      .describe('目标时间："YYYY-MM-DD" 或 "YYYY-MM-DD HH:mm"；相对表述（下周三等）请先换算成绝对时间；没有则省略')
+  },
+  async ({ content, category, dueAt }) => {
+    const r = rememberMemory({ content, category, dueAt })
+    if (!r.ok) {
+      return { content: [{ type: 'text' as const, text: `记不住：${r.error ?? '未知错误'}` }], isError: true }
+    }
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: `已记住：${content}${dueAt ? `（时间 ${dueAt}）` : ''}，可在 Navi「记忆」页查看。`
+        }
+      ]
+    }
   }
 )
 

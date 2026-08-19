@@ -19,6 +19,7 @@ mod dialogue;
 mod discover;
 mod ingest;
 mod lint;
+mod memory;
 mod navi_schema;
 mod paths;
 mod personality;
@@ -67,6 +68,11 @@ fn main() {
             commands::get_relationships,
             commands::generate_persons,
             commands::update_person_note,
+            commands::get_memories,
+            commands::add_memory,
+            commands::set_memory_done,
+            commands::delete_memory,
+            commands::get_mcp_setup,
             commands::read_wiki,
             commands::write_wiki,
             commands::list_wiki,

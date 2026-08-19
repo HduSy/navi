@@ -104,7 +104,9 @@ export function Timeline() {
             className="w-[30px] h-[30px] grid place-items-center rounded-sm border border-stone-300 bg-cream-200 text-stone-500 hover:bg-cream-50 hover:text-stone-600 transition-colors"
             aria-label="前一天"
           >
-            ‹
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M7.5 2.5 4 6l3.5 3.5" />
+            </svg>
           </button>
           <button
             onClick={() => shift(1)}
@@ -112,7 +114,9 @@ export function Timeline() {
             className="w-[30px] h-[30px] grid place-items-center rounded-sm border border-stone-300 bg-cream-200 text-stone-500 hover:bg-cream-50 hover:text-stone-600 transition-colors disabled:opacity-35 disabled:cursor-default"
             aria-label="后一天"
           >
-            ›
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4.5 2.5 8 6l-3.5 3.5" />
+            </svg>
           </button>
           <span className="text-[15px] font-semibold text-stone-700 px-1">{formatDateDisplay(date)}</span>
           {!isToday && (

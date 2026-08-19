@@ -7,6 +7,7 @@
  *   - 否则按平台默认（macOS: ~/Library/Application Support/@navi/desktop）
  */
 
+import crypto from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -169,7 +170,11 @@ export function searchCognition(args: {
   const limit = Math.min(Math.max(args.limit ?? 8, 1), 30)
 
   const results: SearchHit[] = []
-  if (type === 'all' || type === 'memory') results.push(...searchMemory(query, limit))
+  if (type === 'all' || type === 'memory') {
+    // 琐事记忆（memories 表）排前：最可操作
+    results.push(...searchMemories(query, limit))
+    results.push(...searchMemory(query, limit))
+  }
   if (type === 'all' || type === 'personality') {
     results.push(...searchTable('personality', query, limit, ['freeText'], ['freeText', 'dimensions'], 'personality'))
   }
@@ -202,6 +207,129 @@ export function searchCognition(args: {
     if (uniq.length >= limit) break
   }
   return uniq
+}
+
+/* ───────────── memories 表（琐事记忆）：search + remember ───────────── */
+
+const MEMORY_CATEGORIES = ['schedule', 'todo', 'plan', 'note'] as const
+
+const MEMORY_CATEGORY_LABELS: Record<string, string> = {
+  schedule: '日程',
+  todo: '待办',
+  plan: '计划',
+  note: '琐事'
+}
+
+function formatDueMs(ms: number): string {
+  const d = new Date(ms)
+  const pad = (n: number): string => String(n).padStart(2, '0')
+  const date = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+  return d.getHours() === 0 && d.getMinutes() === 0 ? date : `${date} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+/** 搜 memories 表：命中即返回（类型统一标「记忆」，与 wiki 页面的 memory/x 区分） */
+function searchMemories(query: string, limit: number): SearchHit[] {
+  const d = openDb()
+  if (!d) return []
+  let rows: Array<Record<string, unknown>>
+  try {
+    rows = d.prepare('SELECT * FROM memories').all() as Array<Record<string, unknown>>
+  } catch {
+    return [] // 旧库还没有这张表
+  }
+  const hits: Array<SearchHit & { score: number; done: boolean }> = []
+  for (const r of rows) {
+    const content = String(r['content'] ?? '')
+    const done = Number(r['done'] ?? 0) === 1
+    const due = r['due_at'] == null ? null : Number(r['due_at'])
+    const cat = String(r['category'] ?? 'note')
+    const parts: string[] = [MEMORY_CATEGORY_LABELS[cat] ?? '琐事']
+    if (due != null && Number.isFinite(due)) parts.push(formatDueMs(due))
+    if (done) parts.push('已完成')
+    const snippet = parts.join(' · ').slice(0, 120)
+    const sc = score(content, query)
+    if (sc <= 0) continue
+    hits.push({ type: '记忆', title: content, snippet, score: sc, done })
+  }
+  // 分数优先，同分未完成在前
+  hits.sort((a, b) => b.score - a.score || Number(a.done) - Number(b.done))
+  return hits.slice(0, limit).map(({ score: _s, done: _d, ...rest }) => rest)
+}
+
+export interface RememberResult {
+  ok: boolean
+  id?: string
+  error?: string
+}
+
+/** "YYYY-MM-DD" / "YYYY-MM-DD HH:mm" / 带 时区 ISO → epoch ms（本地时区）；空/无法解析返回 null */
+function parseDueAt(s?: string): number | null {
+  const v = (s ?? '').trim()
+  if (!v) return null
+  // 带时区的完整 ISO 直接解析
+  if (/[zZ]$|[+-]\d{2}:\d{2}$/.test(v)) {
+    const t = Date.parse(v)
+    if (!Number.isNaN(t)) return t
+  }
+  const m = v.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/)
+  if (m) {
+    const day = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).getTime()
+    if (Number.isNaN(day)) return null
+    if (!m[4]) return day
+    return day + (Number(m[4]) * 3600 + Number(m[5]) * 60 + Number(m[6] ?? 0)) * 1000
+  }
+  const t = Date.parse(v)
+  return Number.isNaN(t) ? null : t
+}
+
+/** 记一条琐事到 memories 表（source='mcp'）。WAL 模式下与桌面端并发安全。 */
+export function rememberMemory(args: {
+  content: string
+  category?: string
+  dueAt?: string
+}): RememberResult {
+  const content = (args.content ?? '').trim()
+  if (!content) return { ok: false, error: 'content 不能为空' }
+  const category = (MEMORY_CATEGORIES as readonly string[]).includes(args.category ?? '')
+    ? (args.category as string)
+    : 'note'
+  const dueMs = parseDueAt(args.dueAt)
+  const dbPath = resolveDbPath()
+  if (!fs.existsSync(dbPath)) {
+    return { ok: false, error: `navi.db 不存在（${dbPath}），先启动一次 Navi 桌面端` }
+  }
+  let wdb: DatabaseSync | null = null
+  try {
+    // 读写打开（与搜索用的只读连接分开）；busy_timeout 避开与桌面端的瞬态写锁
+    wdb = new DatabaseSync(dbPath)
+    wdb.exec('PRAGMA busy_timeout = 5000')
+    // 自愈：桌面端是旧版本时补建表
+    wdb.exec(`
+      CREATE TABLE IF NOT EXISTS memories (
+        id TEXT PRIMARY KEY,
+        content TEXT NOT NULL,
+        category TEXT NOT NULL DEFAULT 'note',
+        due_at INTEGER,
+        source TEXT NOT NULL DEFAULT 'dialogue',
+        done INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )`)
+    const id = crypto.randomUUID()
+    const now = Date.now()
+    wdb.prepare(
+      'INSERT INTO memories (id, content, category, due_at, source, done, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 0, ?, ?)'
+    ).run(id, content, category, dueMs, 'mcp', now, now)
+    return { ok: true, id }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) }
+  } finally {
+    try {
+      wdb?.close()
+    } catch {
+      // 关闭失败不影响结果
+    }
+  }
 }
 
 /* ───────────── update：写记忆页 ───────────── */

@@ -159,6 +159,19 @@ export interface SkillRow {
   discoveredAt: number
 }
 
+export type MemoryCategory = 'schedule' | 'todo' | 'plan' | 'note'
+
+export interface MemoryRow {
+  id: string
+  content: string
+  category: MemoryCategory | string
+  dueAt: number | null
+  source: string
+  done: number
+  createdAt: number
+  updatedAt: number
+}
+
 export interface PersonRow {
   id: string
   displayName: string
@@ -246,6 +259,18 @@ export interface NaviAPI {
   getRelationships: () => Promise<RelationshipRow[]>
   generatePersons: (filePath: string) => Promise<void>
   updatePersonNote: (id: string, note: string, tags: string[]) => Promise<boolean>
+  getMemories: () => Promise<MemoryRow[]>
+  addMemory: (content: string, category?: string, dueAt?: number | null) => Promise<MemoryRow>
+  setMemoryDone: (id: string, done: boolean) => Promise<boolean>
+  deleteMemory: (id: string) => Promise<boolean>
+  getMcpSetup: () => Promise<{
+    serverJs: string
+    serverJsExists: boolean
+    bundled: boolean
+    nodePath: string | null
+    nodeCommand: string
+    nodeVersion: string | null
+  }>
   readWiki: (relPath: string) => Promise<string | null>
   writeWiki: (relPath: string, content: string) => Promise<boolean>
   listWiki: (type?: string) => Promise<WikiPage[]>

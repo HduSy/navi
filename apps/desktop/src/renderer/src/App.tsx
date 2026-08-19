@@ -10,6 +10,7 @@ import { Wiki } from './pages/Wiki'
 import { Personality } from './pages/Personality'
 import { Skills } from './pages/Skills'
 import { Relations } from './pages/Relations'
+import { Memory } from './pages/Memory'
 import { Brain } from './pages/Brain'
 import { DragRegion, setAccent, formatClock } from './components'
 import type { AccentPage } from './components'
@@ -23,6 +24,7 @@ import {
   IconPersonality,
   IconSkills,
   IconRelations,
+  IconMemory,
   IconBrain
 } from './icons'
 
@@ -50,7 +52,8 @@ const NAV_SECTIONS: Array<{ label: string; items: NavEntry[] }> = [
       { to: '/wiki', label: '经验', tip: '踩过的坑都是经验 · Navi 从会话里自动提炼，可读可编辑', Icon: IconWiki, accent: 'wiki' },
       { to: '/personality', label: '人格', tip: 'Navi 的脾气 · 直接拖动调整，失焦自动保存', Icon: IconPersonality, accent: 'personality' },
       { to: '/skills', label: '技能', tip: '从你的会话里抽出的扩展能力', Icon: IconSkills, accent: 'skills' },
-      { to: '/relations', label: '关系', tip: '从会话里识别出的人', Icon: IconRelations, accent: 'relations' }
+      { to: '/relations', label: '关系', tip: '从会话里识别出的人', Icon: IconRelations, accent: 'relations' },
+      { to: '/memory', label: '记忆', tip: '让我「记住xxx」的琐事都在这', Icon: IconMemory, accent: 'memory' }
     ]
   },
   {
@@ -97,6 +100,7 @@ const PAGE_FACES: Record<string, { frames: string[]; label: string; interval: nu
   '/personality': { frames: ['(￣ω￣)', '(￣ω￣)', '(￣∀￣)', '(￣ω￣)'], label: '端详自己', interval: 750 },
   '/skills':      { frames: ['(・∀・)', '(・∀・)', '(ー∀ー)', '(・∀・)'], label: '清点技能', interval: 550 },
   '/relations':   { frames: ['(＾▽＾)', '(＾▽＾)', '(´▽｀)', '(＾▽＾)'], label: '数人头', interval: 600 },
+  '/memory':      { frames: ['(•ω•)', '(•ω•)', '(•‿•)', '(•ω•)'], label: '翻小本本', interval: 620 },
   '/brain':       { frames: ['(◔_◔)', '(◔_◔)', '(◔‿◔)', '(◔_◔)'], label: '换脑子', interval: 500 }
 }
 
@@ -385,6 +389,7 @@ export function App() {
           <Route path="/personality" element={<Personality />} />
           <Route path="/skills" element={<Skills />} />
           <Route path="/relations" element={<Relations />} />
+          <Route path="/memory" element={<Memory />} />
           <Route path="/brain" element={<Brain />} />
         </Routes>
       </DragRegion>

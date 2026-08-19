@@ -93,6 +93,21 @@ export function IconRelations({ className }: IconProps) {
   )
 }
 
+export function IconMemory({ className }: IconProps) {
+  // 单页纸 + 羽毛笔：随手记下的一页（记忆页用）
+  return (
+    <svg {...base(className)}>
+      {/* 页面 + 折角 */}
+      <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+      <path d="M14 2v4a2 2 0 0 0 2 2h4" />
+      {/* 羽毛笔：斜插右下，笔尖探出页外 */}
+      <path d="M21.1 17.1a3 3 0 0 0-4.2-4.2l-3.4 3.4v4.2h4.2z" />
+      <path d="m19 15-7 7" />
+      <path d="M19.8 18.5h-4.2" />
+    </svg>
+  )
+}
+
 export function IconBrain({ className }: IconProps) {
   // lucide brain：两半球 + 沟回
   return (

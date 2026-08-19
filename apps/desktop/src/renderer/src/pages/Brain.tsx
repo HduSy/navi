@@ -106,6 +106,8 @@ export function Brain() {
             </p>
 
           <CognitionSyncPanel data={syncStatus} reload={reloadSync} />
+
+          <McpAccessPanel />
         </div>
         )}
       </div>
@@ -464,6 +466,143 @@ function BrainConfigSheet({
         </footer>
       </NoDrag>
     </div>
+  )
+}
+
+/* ───────────── MCP 接入面板 ───────────── */
+
+/** 各工具的 MCP 配置位置 */
+const MCP_TARGETS: Array<{ app: string; where: string }> = [
+  { app: 'Claude Code', where: '~/.claude.json 的 mcpServers 字段' },
+  { app: 'Claude Desktop', where: '~/Library/Application Support/Claude/claude_desktop_config.json' },
+  { app: 'Cursor', where: '~/.cursor/mcp.json' },
+  { app: 'OpenCode', where: '~/.config/opencode/opencode.json（mcp 字段，条目加 "type": "stdio"）' },
+  { app: 'Codex', where: '~/.codex/config.toml（TOML：[mcp_servers.navi-knowledge] 下写 command/args）' }
+]
+
+function McpAccessPanel() {
+  const { data: setup } = useAsync(() => window.navi.getMcpSetup())
+  const [copied, setCopied] = useState(false)
+  const [variant, setVariant] = useState<'npx' | 'local'>('npx')
+
+  // 两种形态：npx（包已发布 npm，始终最新，主推）；本地文件（安装包内单文件，
+  // 离线可用）。local 形态 command 来自 Rust：稳定路径用绝对路径，nvm/volta
+  // 等版本管理器路径会随升级失效，自动退回裸 "node"。
+  const localReady = Boolean(setup?.serverJsExists)
+  const active = variant === 'local' && !localReady ? 'npx' : variant
+  const configJson =
+    active === 'local'
+      ? JSON.stringify(
+          { mcpServers: { 'navi-knowledge': { command: setup?.nodeCommand ?? 'node', args: [setup?.serverJs ?? ''] } } },
+          null,
+          2
+        )
+      : JSON.stringify({ mcpServers: { 'navi-knowledge': { command: 'npx', args: ['-y', 'navi-knowledge'] } } }, null, 2)
+
+  async function copyConfig(): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(configJson)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1600)
+    } catch {
+      // 剪贴板不可用时静默：用户仍可手动选中复制
+    }
+  }
+
+  const serverStatus = setup?.bundled
+    ? '已随应用打包'
+    : setup?.serverJsExists
+      ? '开发构建（源码产物）'
+      : '未找到（回退 npx，需发布 npm）'
+  const serverOk = Boolean(setup?.serverJsExists)
+
+  return (
+    <section className="border border-stone-300 rounded p-4 bg-cream-200 mt-4">
+      <div className="flex items-baseline justify-between mb-1 flex-wrap gap-2">
+        <h3 className="text-[13px] font-semibold text-stone-400 uppercase tracking-[0.04em]">MCP 接入</h3>
+        <span className="mono text-[11px] text-stone-400">navi-knowledge</span>
+      </div>
+      <p className="text-[12px] text-stone-500 leading-[1.6] mb-3.5">
+        把 Navi 配成其他工具的 MCP server：在任何工具里说「记住xxx」会写进「记忆」页，search
+        可查认知库。npx 走 npm 拉最新版；本地文件用安装包内单文件，离线可用。
+      </p>
+
+      {/* 形态切换：npx / 本地文件 */}
+      <div className="flex items-center gap-2 mb-3">
+        {(['npx', 'local'] as const).map((v) => {
+          const disabled = v === 'local' && !localReady
+          return (
+            <button
+              key={v}
+              onClick={() => !disabled && setVariant(v)}
+              disabled={disabled}
+              className={
+                'text-xs font-medium py-1.5 px-3 rounded-sm border transition-colors ' +
+                (active === v
+                  ? 'bg-accent-soft text-accent border-accent-line'
+                  : 'bg-cream-200 text-stone-500 border-stone-300 hover:bg-cream-50 hover:text-stone-600') +
+                (disabled ? ' opacity-40 cursor-not-allowed' : '')
+              }
+            >
+              {v === 'npx' ? 'npx' : '本地文件'}
+            </button>
+          )
+        })}
+        {active === 'local' && !setup?.bundled && setup?.serverJsExists && (
+          <span className="mono text-[11px] text-stone-400">开发构建（源码产物）</span>
+        )}
+      </div>
+
+      {/* 就绪状态：server 文件 + node 运行时 */}
+      <div className="flex items-center gap-4 flex-wrap mb-3.5 mono text-[11px]">
+        <span className={serverOk ? 'text-ok' : 'text-danger'}>
+          {serverOk ? '✓' : '✗'} server {serverStatus}
+        </span>
+        <span className={setup?.nodeVersion ? 'text-ok' : 'text-danger'}>
+          {setup?.nodeVersion ? `✓ Node ${setup.nodeVersion}` : '✗ 未检测到 Node（需 22+）'}
+        </span>
+      </div>
+      {active === 'local' && setup?.nodePath && setup.nodeCommand !== setup.nodePath && (
+        <p className="text-[11px] text-stone-400 leading-[1.6] -mt-2 mb-3.5">
+          Node 来自版本管理器（路径随升级变化），command 用了裸 node：终端里跑的工具没问题；
+          GUI 启动的工具（如 Claude Desktop）若找不到 node，建议 brew install node。
+        </p>
+      )}
+
+      <div className="relative">
+        <pre className="mono text-[11.5px] leading-[1.6] text-stone-600 bg-cream-50 border border-stone-300 rounded p-3 pr-[76px] overflow-x-auto whitespace-pre-wrap break-all">
+          {configJson}
+        </pre>
+        <button
+          onClick={() => void copyConfig()}
+          className="absolute top-2 right-2 text-xs font-medium py-1 px-2.5 rounded-sm border border-accent-line bg-accent-soft text-accent hover:opacity-85 transition-opacity"
+        >
+          {copied ? '已复制' : '复制'}
+        </button>
+      </div>
+
+      <div className="mt-3.5 border border-stone-300 rounded overflow-hidden">
+        <div
+          className="grid mono text-[11px] text-stone-400 bg-cream-50 border-b border-stone-300 px-3 py-1.5"
+          style={{ gridTemplateColumns: '120px 1fr' }}
+        >
+          <span>工具</span>
+          <span>配置位置</span>
+        </div>
+        {MCP_TARGETS.map((t) => (
+          <div
+            key={t.app}
+            className="grid px-3 py-1.5 border-b border-stone-300 last:border-0 items-baseline"
+            style={{ gridTemplateColumns: '120px 1fr' }}
+          >
+            <span className="text-[12px] text-stone-600">{t.app}</span>
+            <div className="min-w-0">
+              <div className="mono text-[11px] text-stone-400 break-all leading-[1.5]">{t.where}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
   )
 }
 

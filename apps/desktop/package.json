@@ -8,6 +8,7 @@
     "dev:vite": "vite",
     "build": "tauri build",
     "build:vite": "vite build",
+    "build:mcp": "pnpm --filter navi-knowledge build",
     "preview": "tauri build --no-bundle",
     "dist": "tauri build",
     "tauri": "tauri",
@@ -17,7 +18,9 @@
     "@tauri-apps/api": "^2.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "react-router-dom": "^7.1.0"
+    "react-markdown": "^10.1.0",
+    "react-router-dom": "^7.1.0",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.0.0",

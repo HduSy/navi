@@ -199,6 +199,17 @@ fn init_schema(sqlite: &Connection) {
       discovered_at INTEGER NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS memories (
+      id TEXT PRIMARY KEY,
+      content TEXT NOT NULL,
+      category TEXT NOT NULL DEFAULT 'note',
+      due_at INTEGER,
+      source TEXT NOT NULL DEFAULT 'dialogue',
+      done INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS personality (
       scope TEXT PRIMARY KEY,
       wiki_path TEXT NOT NULL,
@@ -254,6 +265,8 @@ fn init_schema(sqlite: &Connection) {
     CREATE INDEX IF NOT EXISTS idx_habit_event_hour ON habit_events(hour_start);
     CREATE INDEX IF NOT EXISTS idx_person_mentions ON persons(mention_count);
     CREATE INDEX IF NOT EXISTS idx_chat_created ON chat_messages(created_at);
+    CREATE INDEX IF NOT EXISTS idx_memories_created ON memories(created_at);
+    CREATE INDEX IF NOT EXISTS idx_memories_done ON memories(done);
     "#,
         )
         .expect("init schema");

@@ -82,7 +82,7 @@ export function Projects() {
             {items.map((p) => (
               <article
                 key={p.path}
-                className="border border-stone-300 rounded p-[15px] bg-cream-200 cursor-pointer card-hover"
+                className="border border-stone-300 rounded p-[15px] bg-cream-200 card-hover"
               >
                 <h3 className="mono text-sm font-medium text-stone-700">{p.name}</h3>
                 <div className="mono text-[11px] text-stone-400 mt-1 truncate">{p.path}</div>

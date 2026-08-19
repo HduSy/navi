@@ -87,7 +87,7 @@ export function NoDrag({
   )
 }
 
-/** 页面 accent 9 域映射，用于 setAccent 切换 */
+/** 页面 accent 域映射，用于 setAccent 切换 */
 export type AccentPage =
   | 'chat'
   | 'timeline'
@@ -97,6 +97,7 @@ export type AccentPage =
   | 'personality'
   | 'skills'
   | 'relations'
+  | 'memory'
   | 'brain'
 
 const ACCENT_MAP: Record<AccentPage, { a: string; s: string; l: string }> = {
@@ -108,6 +109,7 @@ const ACCENT_MAP: Record<AccentPage, { a: string; s: string; l: string }> = {
   personality: { a: 'var(--accent-personality)',  s: 'var(--accent-personality-soft)',  l: 'var(--accent-personality-line)' },
   skills:      { a: 'var(--accent-skills)',       s: 'var(--accent-skills-soft)',       l: 'var(--accent-skills-line)' },
   relations:   { a: 'var(--accent-relations)',    s: 'var(--accent-relations-soft)',    l: 'var(--accent-relations-line)' },
+  memory:      { a: 'var(--accent-memory)',       s: 'var(--accent-memory-soft)',       l: 'var(--accent-memory-line)' },
   brain:       { a: 'var(--accent-brain)',        s: 'var(--accent-brain-soft)',        l: 'var(--accent-brain-line)' }
 }
 

@@ -124,7 +124,9 @@ async fn backfill_day_timeline(day_start_ms: i64) {
         let mut cur = to_local_hour_start(started);
         let end_h = to_local_hour_start(ended);
         let mut guard = 0;
-        while cur <= end_h && guard < 24 {
+        // 上限两周：超长跨天会话（如连续运行数日的同一 Claude Code 会话）的
+        // 小时迭代远超 24 次，guard<24 会把 24 小时之后的小时永久漏掉
+        while cur <= end_h && guard < 24 * 14 {
             if cur < now_hour_start && !generated_hours.contains(&cur) {
                 pending_hours.insert(cur);
             }

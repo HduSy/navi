@@ -5,7 +5,7 @@ use crate::state::wiki;
 use crate::util::from_local_date_str;
 use rusqlite::params;
 use serde_json::{json, Value};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 /// 通用 SELECT → JSON 行集（无参数）
 fn query_rows(sql: &str) -> Vec<Value> {
@@ -331,6 +331,28 @@ pub fn update_person_note(id: String, note: String, tags: Vec<String>) -> bool {
     true
 }
 
+/* ───────────── 记忆 ───────────── */
+
+#[tauri::command(async)]
+pub fn get_memories() -> Vec<Value> {
+    query_rows("SELECT * FROM memories ORDER BY created_at DESC LIMIT 200")
+}
+
+#[tauri::command(async)]
+pub fn add_memory(content: String, category: Option<String>, due_at: Option<i64>) -> Value {
+    crate::memory::add_memory(&content, category.as_deref(), due_at, "manual")
+}
+
+#[tauri::command(async)]
+pub fn set_memory_done(id: String, done: bool) -> bool {
+    crate::memory::set_memory_done(&id, done)
+}
+
+#[tauri::command(async)]
+pub fn delete_memory(id: String) -> bool {
+    crate::memory::delete_memory(&id)
+}
+
 /* ───────────── Wiki ───────────── */
 
 #[tauri::command(async)]
@@ -408,6 +430,87 @@ pub fn get_wiki_log() -> String {
 pub fn rebuild_index() -> bool {
     wiki().rebuild_index();
     true
+}
+
+/* ───────────── MCP 接入 ───────────── */
+
+/// 探测系统 node：返回 (可执行绝对路径, 版本号)。
+/// GUI 启动时 PATH 常缺 homebrew 等位置，补常见候选。
+fn detect_node() -> (Option<String>, Option<String>) {
+    let mut candidates: Vec<String> = Vec::new();
+    if let Ok(path_var) = std::env::var("PATH") {
+        for p in std::env::split_paths(&path_var) {
+            let s = p.join("node").to_string_lossy().to_string();
+            if !s.is_empty() && !candidates.contains(&s) {
+                candidates.push(s);
+            }
+        }
+    }
+    for extra in ["/opt/homebrew/bin/node", "/usr/local/bin/node"] {
+        if !candidates.iter().any(|c| c == extra) {
+            candidates.push(extra.to_string());
+        }
+    }
+    for c in candidates {
+        let Ok(out) = std::process::Command::new(&c).arg("--version").output() else {
+            continue;
+        };
+        if !out.status.success() {
+            continue;
+        }
+        let version = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        // process.execPath 给出该 node 的绝对路径（win32 输出带引号）
+        let exec = match std::process::Command::new(&c).arg("-p").arg("process.execPath").output() {
+            Ok(o) if o.status.success() => {
+                let s = String::from_utf8_lossy(&o.stdout).trim().trim_matches('"').to_string();
+                if s.is_empty() { c.clone() } else { s }
+            }
+            _ => c.clone(),
+        };
+        return (Some(exec), Some(version));
+    }
+    (None, None)
+}
+
+/// node 路径是否稳定可写死进配置：版本管理器（nvm/volta/asdf/mise）的
+/// 版本化目录会随升级变化，写绝对路径必失效；homebrew/系统路径则稳定。
+fn node_path_stable(exec: &str) -> bool {
+    ![".nvm", "volta", "asdf", "mise"].iter().any(|m| exec.contains(m))
+}
+
+/// MCP server（navi-knowledge 单文件 bundle）路径 + node 探测结果，
+/// 供「脑子 → MCP 接入」面板生成本机可直接粘贴的配置。
+#[tauri::command(async)]
+pub fn get_mcp_setup(app: AppHandle) -> Value {
+    // 打包后的资源路径（ResourceDir/navi-knowledge/index.js）
+    let resource = app
+        .path()
+        .resource_dir()
+        .ok()
+        .map(|d| d.join("navi-knowledge").join("index.js"));
+    // dev 回退：仓库源码构建产物（打包产物里该路径不存在，无副作用）
+    let dev_fallback = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../packages/navi-knowledge/dist/index.js");
+    let (server_js, bundled) = match resource {
+        Some(p) if p.exists() => (p.to_string_lossy().to_string(), true),
+        _ if dev_fallback.exists() => (dev_fallback.to_string_lossy().to_string(), false),
+        _ => (String::new(), false),
+    };
+    let (node_path, node_version) = detect_node();
+    // 写进配置的 command：稳定路径用绝对路径（防 GUI 启动的工具 PATH 不全）；
+    // 版本管理器路径升级会失效，退回裸 "node"（终端场景 PATH 完整可用）
+    let node_command = match &node_path {
+        Some(p) if node_path_stable(p) => p.clone(),
+        _ => "node".to_string(),
+    };
+    json!({
+        "serverJs": server_js,
+        "serverJsExists": !server_js.is_empty(),
+        "bundled": bundled,
+        "nodePath": node_path,
+        "nodeCommand": node_command,
+        "nodeVersion": node_version,
+    })
 }
 
 /* ───────────── Lint / 认知同步 ───────────── */

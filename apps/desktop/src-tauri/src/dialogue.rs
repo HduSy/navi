@@ -53,6 +53,28 @@ fn new_uuid() -> String {
     uuid::Uuid::new_v4().to_string()
 }
 
+/// 路由阶段被停止：用户消息与「已停止」回复落库后立即返回
+fn stopped_result(user_msg_id: &str, user_message: &str, now: i64) -> DialogueResult {
+    {
+        let conn = get_db().0.lock().unwrap();
+        let _ = conn.execute(
+            "INSERT INTO chat_messages (id, role, content, routed_brain, context_used, created_at) VALUES (?1, 'user', ?2, 'dialogue', '{}', ?3)",
+            params![user_msg_id, user_message, now],
+        );
+        let _ = conn.execute(
+            "INSERT INTO chat_messages (id, role, content, routed_brain, context_used, created_at) VALUES (?1, 'navi', ?2, 'dialogue', '{}', ?3)",
+            params![new_uuid(), "（已停止）", crate::paths::now_ms()],
+        );
+    }
+    DialogueResult {
+        reply: "（已停止）".into(),
+        routed_brain: "dialogue".into(),
+        action_taken: None,
+        context_used: json!({}),
+        error: Some("stopped".into()),
+    }
+}
+
 /// on_delta：对话大脑流式增量回调（渲染层实时渲染用），行动路由/分析路径无流式
 pub async fn send_message<F>(user_message: &str, mut on_delta: F) -> DialogueResult
 where
@@ -77,24 +99,7 @@ where
     };
     // 路由阶段被停止：用户消息与「已停止」回复落库后立即返回
     if CHAT_ABORT.load(Ordering::Relaxed) {
-        {
-            let conn = get_db().0.lock().unwrap();
-            let _ = conn.execute(
-                "INSERT INTO chat_messages (id, role, content, routed_brain, context_used, created_at) VALUES (?1, 'user', ?2, 'dialogue', '{}', ?3)",
-                params![user_msg_id, user_message, now],
-            );
-            let _ = conn.execute(
-                "INSERT INTO chat_messages (id, role, content, routed_brain, context_used, created_at) VALUES (?1, 'navi', ?2, 'dialogue', '{}', ?3)",
-                params![new_uuid(), "（已停止）", crate::paths::now_ms()],
-            );
-        }
-        return DialogueResult {
-            reply: "（已停止）".into(),
-            routed_brain: "dialogue".into(),
-            action_taken: None,
-            context_used: json!({}),
-            error: Some("stopped".into()),
-        };
+        return stopped_result(&user_msg_id, user_message, now);
     }
     if let Ok((recognized, applied)) = route_result {
         if recognized {
@@ -119,6 +124,57 @@ where
                 routed_brain: "action".into(),
                 action_taken: if applied.is_empty() { None } else { Some(applied) },
                 context_used: json!({}),
+                error: None,
+            };
+        }
+    }
+
+    // 1.5 记忆路由：本地快筛命中（「记住xxx」类表述）才花一次 LLM，
+    //     把琐事结构化落进 memories 表。提取失败则静默走对话大脑。
+    if crate::memory::looks_like_memory_request(user_message) {
+        let memory_route = tokio::select! {
+            r = crate::memory::route_memory_intent(user_message) => r,
+            _ = async {
+                loop {
+                    if CHAT_ABORT.load(Ordering::Relaxed) {
+                        return
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(100)).await
+                }
+            } => None,
+        };
+        if CHAT_ABORT.load(Ordering::Relaxed) {
+            return stopped_result(&user_msg_id, user_message, now);
+        }
+        if let Some(draft) = memory_route {
+            let content = draft.get("content").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let category = draft.get("category").and_then(|v| v.as_str()).map(|s| s.to_string());
+            let due_at = draft.get("dueAt").and_then(|v| v.as_i64());
+            let row = crate::memory::add_memory(&content, category.as_deref(), due_at, "dialogue");
+            let reply = match due_at {
+                Some(d) => format!(
+                    "记下了：{}。时间我标在 {}，到「记忆」页能看到。",
+                    content,
+                    crate::memory::format_memory_due(d)
+                ),
+                None => format!("记下了：{}。到「记忆」页能看到。", content),
+            };
+            {
+                let conn = get_db().0.lock().unwrap();
+                let _ = conn.execute(
+                    "INSERT INTO chat_messages (id, role, content, routed_brain, context_used, created_at) VALUES (?1, 'user', ?2, 'action', '{}', ?3)",
+                    params![user_msg_id, user_message, now],
+                );
+                let _ = conn.execute(
+                    "INSERT INTO chat_messages (id, role, content, routed_brain, action_taken, context_used, created_at) VALUES (?1, 'navi', ?2, 'action', ?3, '{}', ?4)",
+                    params![new_uuid(), reply, format!("已记住：{}", content), crate::paths::now_ms()],
+                );
+            }
+            return DialogueResult {
+                reply,
+                routed_brain: "action".into(),
+                action_taken: Some(format!("已记住：{}", content)),
+                context_used: json!({ "memory": row }),
                 error: None,
             };
         }
@@ -172,6 +228,13 @@ where
         ));
     }
     sys_parts.push(format!("\n## 当前状态\n{}", context.current));
+    let pending_memories = crate::memory::pending_memory_lines();
+    if !pending_memories.is_empty() {
+        sys_parts.push(format!(
+            "\n## 我帮你记住的事（用户主动要求记下的琐事）\n{}",
+            pending_memories.join("\n")
+        ));
+    }
     if !context.memories.is_empty() {
         sys_parts.push(format!("\n## 相关记忆（来自 wiki）\n{}", context.memories.join("\n")));
     }

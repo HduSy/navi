@@ -91,6 +91,14 @@ function buildNaviApi(): NaviAPI {
     updatePersonNote: (id: string, note: string, tags: string[]) =>
       invoke('update_person_note', { id, note, tags }),
 
+    // 记忆
+    getMemories: () => invoke('get_memories'),
+    addMemory: (content: string, category?: string, dueAt?: number | null) =>
+      invoke('add_memory', { content, category: category ?? null, dueAt: dueAt ?? null }),
+    setMemoryDone: (id: string, done: boolean) => invoke('set_memory_done', { id, done }),
+    deleteMemory: (id: string) => invoke('delete_memory', { id }),
+    getMcpSetup: () => invoke('get_mcp_setup'),
+
     // Wiki
     readWiki: (relPath: string) => invoke('read_wiki', { relPath }),
     writeWiki: (relPath: string, content: string) => invoke('write_wiki', { relPath, content }),
