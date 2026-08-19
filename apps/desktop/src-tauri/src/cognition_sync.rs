@@ -34,23 +34,36 @@ pub struct SyncTarget {
     pub id: &'static str,
     pub label: &'static str,
     pub file: std::path::PathBuf,
+    /// 该工具会话存储路径的特征片段，用于从 session file_path 反推工具（见 tools_for_session_paths）
+    pub session_marker: &'static str,
 }
 
 /// 10 个工具的目标文件表（全局上下文）
 pub fn get_targets() -> Vec<SyncTarget> {
     let h = home();
     vec![
-        SyncTarget { id: "claude", label: "Claude Code", file: h.join(".claude/CLAUDE.md") },
-        SyncTarget { id: "codex", label: "Codex", file: h.join(".codex/AGENTS.md") },
-        SyncTarget { id: "opencode", label: "OpenCode", file: h.join(".config/opencode/AGENTS.md") },
-        SyncTarget { id: "qoder", label: "Qoder CLI", file: h.join(".qoder/AGENTS.md") },
-        SyncTarget { id: "kimi", label: "Kimi Code", file: h.join(".kimi/AGENTS.md") },
-        SyncTarget { id: "zcode", label: "智谱 ZCode", file: h.join("AGENTS.md") },
-        SyncTarget { id: "trae", label: "字节 Trae", file: h.join(".trae/AGENTS.md") },
-        SyncTarget { id: "gemini", label: "Gemini CLI", file: h.join(".gemini/GEMINI.md") },
-        SyncTarget { id: "cursor", label: "Cursor", file: h.join(".cursor/AGENTS.md") },
-        SyncTarget { id: "cline", label: "Cline", file: h.join(".clinerules") },
+        SyncTarget { id: "claude", label: "Claude Code", file: h.join(".claude/CLAUDE.md"), session_marker: ".claude" },
+        SyncTarget { id: "codex", label: "Codex", file: h.join(".codex/AGENTS.md"), session_marker: ".codex" },
+        SyncTarget { id: "opencode", label: "OpenCode", file: h.join(".config/opencode/AGENTS.md"), session_marker: "opencode" },
+        SyncTarget { id: "qoder", label: "Qoder CLI", file: h.join(".qoder/AGENTS.md"), session_marker: ".qoder" },
+        SyncTarget { id: "kimi", label: "Kimi Code", file: h.join(".kimi/AGENTS.md"), session_marker: ".kimi" },
+        SyncTarget { id: "zcode", label: "智谱 ZCode", file: h.join("AGENTS.md"), session_marker: "zcode" },
+        SyncTarget { id: "trae", label: "字节 Trae", file: h.join(".trae/AGENTS.md"), session_marker: ".trae" },
+        SyncTarget { id: "gemini", label: "Gemini CLI", file: h.join(".gemini/GEMINI.md"), session_marker: ".gemini" },
+        SyncTarget { id: "cursor", label: "Cursor", file: h.join(".cursor/AGENTS.md"), session_marker: ".cursor" },
+        SyncTarget { id: "cline", label: "Cline", file: h.join(".clinerules"), session_marker: "clinerules" },
     ]
+}
+
+/// 从一组会话文件路径归类出用到的工具名（按 get_targets 枚举顺序去重）。
+/// 时间线据此展示「这一小时用到的工具」——collector 以后接入新工具的会话目录，这里自动跟上。
+/// 注：特征为子串匹配，极小概率误命中项目目录名（如 ~/.claude 下的 .cursor 项目），可忽略。
+pub fn tools_for_session_paths(paths: &[String]) -> Vec<String> {
+    get_targets()
+        .into_iter()
+        .filter(|t| paths.iter().any(|p| p.contains(t.session_marker)))
+        .map(|t| t.label.to_string())
+        .collect()
 }
 
 /* ───────────── 认知内容生成 ───────────── */
@@ -87,6 +100,7 @@ pub fn build_cognition_content() -> String {
     lines.push("# Navi 认知同步".to_string());
     lines.push(String::new());
     lines.push("> 由 Navi 自动维护。想保留自己的内容请写在这个标记块之外。".to_string());
+    lines.push("> 用户说「记住…」「别忘了…」时，若 navi-knowledge MCP server 可用，请调用其 remember 工具写入。".to_string());
     lines.push(String::new());
 
     // ── 人格 ──

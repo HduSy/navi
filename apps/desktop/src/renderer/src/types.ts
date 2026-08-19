@@ -106,6 +106,8 @@ export interface TimelineEntryRow {
   sourceSessions: string
   generatedAt: number
   finalized: number
+  /** 该小时用到的工具（由 source_sessions 按认知同步工具枚举归类，查询时现算） */
+  tools?: string[]
 }
 
 export interface DiaryRow {

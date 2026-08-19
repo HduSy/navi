@@ -179,20 +179,33 @@ pub async fn fetch_brain_models(cfg: crate::brain::BrainProviderConfig) -> Resul
 
 /* ───────────── 时间线 ───────────── */
 
+/// 给时间线条目行挂 tools 字段：由 source_sessions 的会话文件路径
+/// 按认知同步的工具枚举归类（查询时现算，历史条目无需回填）
+fn attach_timeline_tools(rows: &mut [Value]) {
+    for row in rows.iter_mut() {
+        let Value::Object(obj) = row else { continue };
+        let Some(Value::String(ss)) = obj.get("sourceSessions") else { continue };
+        let Ok(paths) = serde_json::from_str::<Vec<String>>(ss) else { continue };
+        obj.insert("tools".into(), json!(crate::cognition_sync::tools_for_session_paths(&paths)));
+    }
+}
+
 #[tauri::command(async)]
 pub fn get_timeline(date: Option<String>) -> Value {
     if date.is_none() {
-        let rows = query_rows("SELECT * FROM timeline_entries ORDER BY hour_start DESC LIMIT 100");
+        let mut rows = query_rows("SELECT * FROM timeline_entries ORDER BY hour_start DESC LIMIT 100");
+        attach_timeline_tools(&mut rows);
         return json!(rows);
     }
     let Some(day_start_ms) = from_local_date_str(&date.unwrap()) else {
         return json!({ "entries": [], "hasSessions": false });
     };
     let day_end_ms = day_start_ms + 86_400_000 - 1;
-    let rows = query_rows_p(
+    let mut rows = query_rows_p(
         "SELECT * FROM timeline_entries WHERE hour_start >= ?1 AND hour_start <= ?2 ORDER BY hour_start DESC",
         &[&day_start_ms, &day_end_ms],
     );
+    attach_timeline_tools(&mut rows);
     let has_sessions: bool = {
         let conn = get_db().0.lock().unwrap();
         let mut stmt = conn.prepare("SELECT started_at, ended_at FROM sessions").unwrap();

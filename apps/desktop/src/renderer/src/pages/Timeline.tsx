@@ -109,6 +109,14 @@ export function Timeline() {
             </svg>
           </button>
           <button
+            onClick={() => setDate(today)}
+            disabled={isToday}
+            className="h-[30px] px-2.5 text-xs font-medium rounded-sm border border-stone-300 bg-cream-200 text-stone-500 hover:bg-cream-50 hover:text-stone-600 transition-colors disabled:opacity-35 disabled:cursor-default"
+            aria-label="回到今天"
+          >
+            今天
+          </button>
+          <button
             onClick={() => shift(1)}
             disabled={isToday}
             className="w-[30px] h-[30px] grid place-items-center rounded-sm border border-stone-300 bg-cream-200 text-stone-500 hover:bg-cream-50 hover:text-stone-600 transition-colors disabled:opacity-35 disabled:cursor-default"
@@ -119,14 +127,6 @@ export function Timeline() {
             </svg>
           </button>
           <span className="text-[15px] font-semibold text-stone-700 px-1">{formatDateDisplay(date)}</span>
-          {!isToday && (
-            <button
-              onClick={() => setDate(today)}
-              className="h-[30px] px-3 text-xs font-medium rounded-sm border border-stone-300 bg-cream-200 text-stone-500 hover:bg-cream-50 hover:text-stone-600 transition-colors"
-            >
-              回到今天
-            </button>
-          )}
         </div>
       </NoDrag>
 
@@ -165,6 +165,39 @@ type TimelineItem =
 /** entry 气泡内容：仅 summary（记下时间由 TimelineRow 渲染到卡片右下角） */
 function EntryBody({ entry }: { entry: TimelineEntryRow }) {
   return <p className="text-[13.5px] leading-[1.6] text-stone-600">{entry.summary}</p>
+}
+
+/** 工具品牌色（官方色，附出处）：
+ *  Claude Code #D97757 simple-icons/claude · Codex #343541 openai.com/codex 页面主色
+ *  OpenCode #000000 simple-icons（单色品牌）· Qoder #2ADB5C 官方绿
+ *  Kimi #000000 simple-icons（单色品牌）· ZCode #000000 单色品牌
+ *  Trae #32F08C simple-icons/trae · Gemini #8E75B2 simple-icons/googlegemini
+ *  Cursor #000000 simple-icons（单色品牌）· Cline #18181B simple-icons/cline */
+const TOOL_COLORS: Record<string, string> = {
+  'Claude Code': '#D97757',
+  Codex: '#343541',
+  OpenCode: '#000000',
+  'Qoder CLI': '#2ADB5C',
+  'Kimi Code': '#000000',
+  '智谱 ZCode': '#000000',
+  '字节 Trae': '#32F08C',
+  'Gemini CLI': '#8E75B2',
+  Cursor: '#000000',
+  Cline: '#18181B',
+}
+
+/** 工具标签：品牌色描边 + 淡色底 + 品牌点，和正文摘要拉开区分 */
+function ToolTag({ name }: { name: string }) {
+  const color = TOOL_COLORS[name] ?? '#78716C'
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-sm border px-1.5 py-[1px] mono text-[10.5px] leading-[1.6]"
+      style={{ borderColor: `${color}66`, color, background: `${color}12` }}
+    >
+      <span className="w-1.5 h-1.5 rounded-full" style={{ background: color }} />
+      {name}
+    </span>
+  )
 }
 
 function TimelineRow({ item, isLast, nowHourStart, showAsDayEnd }: { item: TimelineItem; isLast: boolean; nowHourStart: number; showAsDayEnd?: boolean }) {
@@ -234,8 +267,18 @@ function TimelineRow({ item, isLast, nowHourStart, showAsDayEnd }: { item: Timel
       <div className={'border rounded px-3.5 py-3 transition-colors ' + cardCls}>
         {body}
         {item.kind === 'entry' && (
-          <div className="mt-2 mono text-[11px] text-stone-400 text-right">
-            Navi 于 {formatTime(item.entry.generatedAt)} 记下
+          <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5">
+            {/* 这一小时用到的工具（按认知同步枚举归类），与记下时间同行 */}
+            {!!item.entry.tools?.length && (
+              <div className="flex flex-wrap gap-1.5">
+                {item.entry.tools.map((t) => (
+                  <ToolTag key={t} name={t} />
+                ))}
+              </div>
+            )}
+            <span className="ml-auto mono text-[11px] text-stone-400">
+              Navi 于 {formatTime(item.entry.generatedAt)} 记下
+            </span>
           </div>
         )}
       </div>
