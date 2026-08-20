@@ -51,9 +51,11 @@ server.tool(
 
 server.tool(
   'remember',
-  '往 Navi「记忆」里记一条琐事（日程/待办/计划/笔记）。当用户说「记住…」「别忘了…」「提醒我…」这类主动记忆表述时调用。',
+  '往 Navi「记忆」里记一条琐事（日程/待办/计划/笔记）。当用户说「记住…」「别忘了…」「提醒我…」这类主动记忆表述时调用。'
+    + '日期规则：用户原话里的日期一律原样记录（农历、阳历双历并述时各自保留），严禁农历↔阳历换算、推算年份或编造对应关系；'
+    + '每年重复的日期（生日/纪念日）不要填 dueAt。',
   {
-    content: z.string().describe('记忆内容本身（去掉「记住」这类指令措辞，保留完整信息）'),
+    content: z.string().describe('记忆内容本身（去掉「记住」这类指令措辞，保留完整信息；日期按用户原话原样保留）'),
     category: z
       .enum(['schedule', 'todo', 'plan', 'note'])
       .optional()
@@ -61,7 +63,7 @@ server.tool(
     dueAt: z
       .string()
       .optional()
-      .describe('目标时间："YYYY-MM-DD" 或 "YYYY-MM-DD HH:mm"；相对表述（下周三等）请先换算成绝对时间；没有则省略')
+      .describe('仅一次性日程填："YYYY-MM-DD" 或 "YYYY-MM-DD HH:mm"（相对表述先换算）；每年重复的日期（生日等）和农历日期省略')
   },
   async ({ content, category, dueAt }) => {
     const r = rememberMemory({ content, category, dueAt })

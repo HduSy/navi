@@ -37,7 +37,6 @@ export function Memory() {
   const { data, loading, reload } = useAsync(() => window.navi.getMemories())
   const scrollRef = useScrollRestore('navi:scroll:memory')
   const [filter, setFilter] = useState<Filter>('all')
-  const [adding, setAdding] = useState(false)
 
   const all = data ?? []
   const filtered = filter === 'all' ? all : all.filter((m) => m.category === filter)
@@ -81,34 +80,17 @@ export function Memory() {
               {f === 'all' ? '全部' : CATEGORY_LABELS[f]}
             </button>
           ))}
-          <span className="w-px h-4 bg-stone-300" aria-hidden />
-          <button
-            onClick={() => setAdding((v) => !v)}
-            className="text-xs font-medium py-1.5 px-3 rounded-sm border bg-cream-200 text-stone-500 border-stone-300 hover:bg-cream-50 hover:text-stone-600 transition-colors"
-          >
-            {adding ? '收起' : '+ 记一条'}
-          </button>
-        </div>
-      )}
-      {adding && (
-        <div className="shrink-0 border-b border-stone-300 bg-cream-50 px-7 py-3">
-          <AddForm
-            onSaved={() => {
-              setAdding(false)
-              reload()
-            }}
-          />
         </div>
       )}
       <div ref={scrollRef} className="flex-1 overflow-auto px-7 py-[22px]">
         {loading ? (
           <p className="text-stone-400">加载中...</p>
         ) : all.length === 0 ? (
-          <Empty text="还没记下什么。在聊天里对我说「记住xxx」，或者点上面记一条。" />
+          <Empty text="还没记下什么。在聊天里对我说「记住xxx」就行。" />
         ) : pending.length === 0 && done.length === 0 ? (
           <Empty text="这个分类下还没有记忆" />
         ) : (
-          <div className="space-y-2.5 max-w-3xl">
+          <div className="space-y-2.5">
             {pending.map((m) => (
               <MemoryCard key={m.id} m={m} onToggle={toggleDone} onRemove={remove} />
             ))}
@@ -122,80 +104,6 @@ export function Memory() {
             )}
           </div>
         )}
-      </div>
-    </div>
-  )
-}
-
-function AddForm({ onSaved }: { onSaved: () => void }) {
-  const [content, setContent] = useState('')
-  const [category, setCategory] = useState<string>('note')
-  const [date, setDate] = useState('')
-  const [time, setTime] = useState('')
-  const [saving, setSaving] = useState(false)
-
-  async function save(): Promise<void> {
-    const text = content.trim()
-    if (!text || saving) return
-    setSaving(true)
-    try {
-      let dueAt: number | null = null
-      if (date) {
-        dueAt = new Date(`${date}T${time || '00:00'}`).getTime()
-      }
-      await window.navi.addMemory(text, category, dueAt)
-      onSaved()
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <div className="space-y-2.5">
-      <input
-        value={content}
-        onChange={(e) => setContent(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void save()
-        }}
-        autoFocus
-        placeholder="要记住什么？例如：10 月 1 日早上 10 点抢票"
-        className="w-full bg-cream-200 border border-stone-300 rounded px-3 py-1.5 text-sm text-stone-700 placeholder-stone-400 focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent-soft transition-colors duration-150"
-      />
-      <div className="flex items-center gap-2 flex-wrap">
-        {(['schedule', 'todo', 'plan', 'note'] as const).map((c) => (
-          <button
-            key={c}
-            onClick={() => setCategory(c)}
-            className={
-              'text-xs font-medium py-1.5 px-3 rounded-sm border transition-colors ' +
-              (category === c
-                ? 'bg-accent-soft text-accent border-accent-line'
-                : 'bg-cream-200 text-stone-500 border-stone-300 hover:bg-cream-50 hover:text-stone-600')
-            }
-          >
-            {CATEGORY_LABELS[c]}
-          </button>
-        ))}
-        <input
-          type="date"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-          className="bg-cream-200 border border-stone-300 rounded px-2.5 py-1 text-xs text-stone-600 focus:outline-none focus:border-accent mono"
-        />
-        <input
-          type="time"
-          value={time}
-          onChange={(e) => setTime(e.target.value)}
-          className="bg-cream-200 border border-stone-300 rounded px-2.5 py-1 text-xs text-stone-600 focus:outline-none focus:border-accent mono"
-        />
-        <button
-          onClick={() => void save()}
-          disabled={!content.trim() || saving}
-          className="ml-auto text-xs font-medium py-1.5 px-4 rounded-sm border border-accent-line bg-accent-soft text-accent hover:opacity-85 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          {saving ? '保存中…' : '记住（⌘↩）'}
-        </button>
       </div>
     </div>
   )
@@ -266,7 +174,7 @@ function MemoryCard({
             </span>
           )}
           <span className="mono text-[11px] text-stone-400">
-            {m.source === 'dialogue' ? '聊天记下' : '手动记的'} · {formatTime(m.createdAt)}
+            {m.source === 'dialogue' ? '聊天记下' : 'MCP 记下'} · {formatTime(m.createdAt)}
           </span>
         </div>
       </div>

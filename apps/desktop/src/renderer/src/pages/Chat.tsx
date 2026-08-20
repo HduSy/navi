@@ -198,9 +198,24 @@ export function Chat() {
               </article>
             ) : (
               <>
-                {messages.map((m) => (
-                  <MessageBubble key={m.id} msg={m} />
-                ))}
+                {messages.map((m, i) => {
+                  // 重试素材：该回复之前最近的一条用户消息
+                  let prevUser: string | null = null
+                  for (let j = i - 1; j >= 0; j--) {
+                    if (messages[j]!.role === 'user') {
+                      prevUser = messages[j]!.content
+                      break
+                    }
+                  }
+                  return (
+                    <MessageBubble
+                      key={m.id}
+                      msg={m}
+                      canRetry={!sending && m.routedBrain === 'dialogue' && !!prevUser}
+                      onRetry={prevUser ? () => void send(prevUser) : undefined}
+                    />
+                  )
+                })}
                 {sending && <ThinkingBubble text={streamText} />}
               </>
             )}
@@ -279,13 +294,25 @@ export function Chat() {
   )
 }
 
-function MessageBubble({ msg }: { msg: DisplayMessage }) {
+function MessageBubble({ msg, canRetry, onRetry }: { msg: DisplayMessage; canRetry: boolean; onRetry?: () => void }) {
   const isUser = msg.role === 'user'
   const isAction = msg.routedBrain === 'action'
+  const [copied, setCopied] = useState(false)
+
+  async function copy(): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(msg.content)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      // 剪贴板不可用时静默
+    }
+  }
+
   return (
     <article
       className={
-        'flex flex-col max-w-[72%] mb-4 ' +
+        'group flex flex-col max-w-[72%] mb-4 ' +
         (isUser ? 'ml-auto items-end' : 'items-start')
       }
     >
@@ -320,6 +347,21 @@ function MessageBubble({ msg }: { msg: DisplayMessage }) {
         }
       >
         <span>{formatClock(msg.createdAt)}</span>
+        {/* hover 浮现的操作：复制 / 重试（图标，lucide 风格） */}
+        <span className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            onClick={() => void copy()}
+            title="复制"
+            className={'hover:text-stone-600 cursor-pointer ' + (copied ? 'text-ok' : '')}
+          >
+            {copied ? <IconCheck /> : <IconCopy />}
+          </button>
+          {!isUser && canRetry && onRetry && (
+            <button onClick={onRetry} title="重新回答这个问题" className="hover:text-stone-600 cursor-pointer">
+              <IconRetry />
+            </button>
+          )}
+        </span>
       </div>
     </article>
   )
@@ -399,5 +441,53 @@ function Stat({ label, value }: { label: string; value: number }) {
       <div className="mono text-[11px] tracking-[0.04em] text-stone-400">{label}</div>
       <div className="text-[24px] font-semibold text-stone-700 mt-0.5 tabular-nums">{value.toLocaleString()}</div>
     </div>
+  )
+}
+
+/* 消息操作小图标：与 icons.tsx 同风格（stroke-2 currentColor），14px 适配 meta 行 */
+function MsgIcon({ children }: { children: React.ReactNode }) {
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      {children}
+    </svg>
+  )
+}
+
+/** lucide copy：复制消息内容 */
+function IconCopy() {
+  return (
+    <MsgIcon>
+      <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+      <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+    </MsgIcon>
+  )
+}
+
+/** lucide check：复制成功的对勾 */
+function IconCheck() {
+  return (
+    <MsgIcon>
+      <path d="M20 6 9 17l-5-5" />
+    </MsgIcon>
+  )
+}
+
+/** lucide rotate-ccw：重新回答 */
+function IconRetry() {
+  return (
+    <MsgIcon>
+      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+      <path d="M3 3v5h5" />
+    </MsgIcon>
   )
 }

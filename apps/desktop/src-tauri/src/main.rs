@@ -69,7 +69,6 @@ fn main() {
             commands::generate_persons,
             commands::update_person_note,
             commands::get_memories,
-            commands::add_memory,
             commands::set_memory_done,
             commands::delete_memory,
             commands::get_mcp_setup,

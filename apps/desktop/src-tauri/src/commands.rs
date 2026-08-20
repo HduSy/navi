@@ -352,11 +352,6 @@ pub fn get_memories() -> Vec<Value> {
 }
 
 #[tauri::command(async)]
-pub fn add_memory(content: String, category: Option<String>, due_at: Option<i64>) -> Value {
-    crate::memory::add_memory(&content, category.as_deref(), due_at, "manual")
-}
-
-#[tauri::command(async)]
 pub fn set_memory_done(id: String, done: bool) -> bool {
     crate::memory::set_memory_done(&id, done)
 }

@@ -74,7 +74,8 @@ pub async fn route_memory_intent(message: &str) -> Option<Value> {
             + "是则返回 JSON {remember: true, content: \"...\", category: \"schedule|todo|plan|note\", dueAt: \"YYYY-MM-DD\" 或 \"YYYY-MM-DD HH:mm\" 或 \"\"}。"
             + "content 是去掉指令措辞后的记忆内容本身，保留完整信息；"
             + "category：schedule=日期/日程/定点要做的事（抢票、抢购、开会），todo=待办事项，plan=较长线的计划，note=其他琐事；"
-            + "dueAt 是内容里明确的目标时间，相对表述（下周三、10月1号等）请换算成绝对日期，没有则为空串。"
+            + "日期规则：用户原话里的日期一律原样记录（农历、阳历双历并述时各自保留），严禁农历↔阳历换算、推算年份或编造对应关系；"
+            + "每年重复的日期（生日/纪念日）dueAt 留空；只有一次性日程且用户给出明确公历日期（相对表述需换算）才填 dueAt。"
             + "否则只返回 {remember: false}。",
     );
     let ctx = format!("今天: {}\n用户消息: {}", to_local_date_str(crate::paths::now_ms()), message);

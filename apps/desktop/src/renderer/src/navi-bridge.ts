@@ -93,8 +93,6 @@ function buildNaviApi(): NaviAPI {
 
     // 记忆
     getMemories: () => invoke('get_memories'),
-    addMemory: (content: string, category?: string, dueAt?: number | null) =>
-      invoke('add_memory', { content, category: category ?? null, dueAt: dueAt ?? null }),
     setMemoryDone: (id: string, done: boolean) => invoke('set_memory_done', { id, done }),
     deleteMemory: (id: string) => invoke('delete_memory', { id }),
     getMcpSetup: () => invoke('get_mcp_setup'),

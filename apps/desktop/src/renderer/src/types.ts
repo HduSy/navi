@@ -262,7 +262,6 @@ export interface NaviAPI {
   generatePersons: (filePath: string) => Promise<void>
   updatePersonNote: (id: string, note: string, tags: string[]) => Promise<boolean>
   getMemories: () => Promise<MemoryRow[]>
-  addMemory: (content: string, category?: string, dueAt?: number | null) => Promise<MemoryRow>
   setMemoryDone: (id: string, done: boolean) => Promise<boolean>
   deleteMemory: (id: string) => Promise<boolean>
   getMcpSetup: () => Promise<{
